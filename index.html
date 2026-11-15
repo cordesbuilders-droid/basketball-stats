@@ -119,6 +119,9 @@ table.stats tr:last-child td{border-bottom:0}
 .hl-item iframe,.local-video video{display:block;width:100%;aspect-ratio:16/9;height:auto;border:0;border-radius:8px;background:#111;margin:8px 0}
 .seg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
 .seg .btn{flex:1 1 6rem}
+.player-switch{max-width:780px;margin:0 auto;padding:0 8px 10px}
+.player-switch .seg{margin:0}
+.player-switch .btn{flex:1 1 0;min-width:0}
 #fileImport{display:none}
 .muted{color:var(--muted)}
 @media (max-width:640px){
@@ -179,6 +182,7 @@ table.stats tr:last-child td{border-bottom:0}
       <button type="button" class="tab" data-tab="season">Season</button>
       <button type="button" class="tab" data-tab="highlights">Highlights</button>
     </nav>
+    <div class="player-switch" id="playerSwitch" role="tablist" aria-label="Player"></div>
   </header>
   <div id="installTip" class="banner tip" role="note">
     <span>Add this to your Home Screen to use it like an app. iPhone: open in Safari, tap Share, then Add to Home Screen. Android: in Chrome, tap the menu, then Add to Home screen. Saved games sync to every phone and computer that opens this link.</span>
@@ -205,6 +209,7 @@ table.stats tr:last-child td{border-bottom:0}
 
   var STORAGE_KEY = "bball-stats-v1";
   var HINT_KEY = "bball-stats-hint-v1";
+  var PLAYER_FOCUS_KEY = "bball-stats-focus-player-v1";
   var BASE = "/basketball-stats/";
   var EDITOR_KEY = "bball-stats-editor-v1";
   var MIGRATED_KEY = "bball-stats-cloud-migrated-v1";
@@ -294,6 +299,79 @@ table.stats tr:last-child td{border-bottom:0}
   function playerLabel(player) {
     var n = jerseyNumber(player.number);
     return n ? ("#" + n + " " + player.name) : player.name;
+  }
+
+  function playerHasStats(player, shots) {
+    if (player && player.stats && ALL_KEYS.some(function (k) { return !!player.stats[k]; })) return true;
+    var id = player && player.id;
+    if (id && shots && shots.some(function (s) { return s.playerId === id; })) return true;
+    return false;
+  }
+
+  function switcherPlayers() {
+    var list = [];
+    var seen = {};
+    function add(p) {
+      if (!p || !p.id || seen[p.id]) return;
+      seen[p.id] = true;
+      list.push({ id: p.id, name: p.name, number: p.number });
+    }
+    (data.roster || []).forEach(add);
+    if (data.current && data.current.players) data.current.players.forEach(add);
+    (data.games || []).forEach(function (g) {
+      (g.players || []).forEach(add);
+    });
+    return list;
+  }
+
+  function defaultFocusId() {
+    var list = switcherPlayers();
+    return list.length ? list[0].id : "all";
+  }
+
+  function loadFocusPlayer() {
+    var stored = "";
+    try { stored = localStorage.getItem(PLAYER_FOCUS_KEY) || ""; } catch (e) {}
+    if (stored === "all") return "all";
+    var list = switcherPlayers();
+    if (stored && list.some(function (p) { return p.id === stored; })) return stored;
+    return list.length ? list[0].id : "all";
+  }
+
+  function setFocusPlayer(id) {
+    var next = id === "all" ? "all" : id;
+    var list = switcherPlayers();
+    if (next !== "all" && !list.some(function (p) { return p.id === next; })) next = defaultFocusId();
+    ui.focusPlayer = next;
+    try { localStorage.setItem(PLAYER_FOCUS_KEY, next); } catch (e) {}
+  }
+
+  function isAllFocus() {
+    return !ui.focusPlayer || ui.focusPlayer === "all";
+  }
+
+  function gameHasPlayerActivity(game, playerId) {
+    if (!playerId || playerId === "all") return true;
+    var p = (game.players || []).find(function (x) { return x.id === playerId; });
+    return !!(p && playerHasStats(p, game.shots));
+  }
+
+  function playerSwitcherHtml() {
+    var list = switcherPlayers();
+    if (!list.length) return "";
+    var focus = ui.focusPlayer || defaultFocusId();
+    var buttons = list.map(function (p) {
+      var on = focus === p.id;
+      return '<button type="button" class="btn' + (on ? " primary" : "") + '" data-act="focus-player" data-pid="' + esc(p.id) + '" role="tab" aria-selected="' + (on ? "true" : "false") + '">' +
+        esc(playerLabel(p)) + "</button>";
+    }).join("") +
+      '<button type="button" class="btn' + (focus === "all" ? " primary" : "") + '" data-act="focus-player" data-pid="all" role="tab" aria-selected="' + (focus === "all" ? "true" : "false") + '">All</button>';
+    return '<div class="seg">' + buttons + "</div>";
+  }
+
+  function renderPlayerSwitch() {
+    var el = document.getElementById("playerSwitch");
+    if (el) el.innerHTML = playerSwitcherHtml();
   }
 
   function pct(made, attempted) {
@@ -826,7 +904,13 @@ table.stats tr:last-child td{border-bottom:0}
         (ui.confirmReset ? '<button type="button" class="btn" data-act="cancel-reset">Cancel</button>' : "") +
       "</div></div>";
 
-    g.players.forEach(function (player) {
+    var shown = isAllFocus() ? g.players : g.players.filter(function (p) { return p.id === ui.focusPlayer; });
+    if (!shown.length) {
+      var focusMeta = switcherPlayers().find(function (p) { return p.id === ui.focusPlayer; }) || { name: "This player", number: "" };
+      html += '<div class="panel"><p class="empty">' + esc(playerLabel(focusMeta)) +
+        " isn't in this game. Switch to All to see everyone, or add them below.</p></div>";
+    }
+    shown.forEach(function (player) {
       html += '<div class="panel" data-player="' + esc(player.id) + '">' +
         '<div class="panel-head"><h2>' +
           (jerseyNumber(player.number) ? '<span class="num">#' + esc(jerseyNumber(player.number)) + "</span>" : "") +
@@ -854,7 +938,11 @@ table.stats tr:last-child td{border-bottom:0}
   }
 
   function gameSummaryLine(game) {
-    return game.players.map(function (p) {
+    var players = game.players;
+    if (!isAllFocus()) {
+      players = players.filter(function (p) { return p.id === ui.focusPlayer; });
+    }
+    return players.map(function (p) {
       return playerLabel(p) + " " + p.stats.pts + " pts";
     }).join(" · ");
   }
@@ -869,6 +957,9 @@ table.stats tr:last-child td{border-bottom:0}
     if (ui.gamesSeason && ui.gamesSeason !== "all") {
       list = list.filter(function (g) { return g.season === ui.gamesSeason; });
     }
+    if (!isAllFocus()) {
+      list = list.filter(function (g) { return gameHasPlayerActivity(g, ui.focusPlayer); });
+    }
     var html = '<div class="panel"><div class="panel-head"><h2>Games</h2></div>' +
       '<div class="fields"><label class="field"><span>Season</span>' +
       '<select id="gamesSeason">' +
@@ -876,7 +967,9 @@ table.stats tr:last-child td{border-bottom:0}
         optionList(seasons, ui.gamesSeason) +
       "</select></label></div>";
     if (!list.length) {
-      html += '<p class="empty">' + (cloud.gotGames || cloud.failed ? "No saved games yet. Track a game, then tap Save / End Game." : "Loading games…") + "</p></div>";
+      html += '<p class="empty">' + (cloud.gotGames || cloud.failed
+        ? (isAllFocus() ? "No saved games yet. Track a game, then tap Save / End Game." : "No saved games for this player yet.")
+        : "Loading games…") + "</p></div>";
       return html;
     }
     html += list.map(function (g) {
@@ -905,12 +998,16 @@ table.stats tr:last-child td{border-bottom:0}
     return fallback || { id: id, name: "Player", number: "" };
   }
 
-  function seasonTotals(seasonId) {
+  function seasonTotals(seasonId, playerId) {
     var games = data.games.filter(function (g) { return g.season === seasonId; });
+    if (playerId && playerId !== "all") {
+      games = games.filter(function (g) { return gameHasPlayerActivity(g, playerId); });
+    }
     var byId = {};
     var shots = [];
     games.forEach(function (g) {
       g.players.forEach(function (p) {
+        if (playerId && playerId !== "all" && p.id !== playerId) return;
         if (!byId[p.id]) {
           var meta = findRosterMeta(p.id, p);
           byId[p.id] = {
@@ -927,7 +1024,10 @@ table.stats tr:last-child td{border-bottom:0}
         if (p.number) row.number = p.number;
         if (p.name) row.name = p.name;
       });
-      (g.shots || []).forEach(function (s) { shots.push(s); });
+      (g.shots || []).forEach(function (s) {
+        if (playerId && playerId !== "all" && s.playerId !== playerId) return;
+        shots.push(s);
+      });
     });
     var rows = Object.keys(byId).map(function (id) { return byId[id]; });
     rows.sort(function (a, b) { return b.stats.pts - a.stats.pts || a.name.localeCompare(b.name); });
@@ -938,7 +1038,7 @@ table.stats tr:last-child td{border-bottom:0}
     var seasons = seasonOptions(ui.seasonId);
     if (!ui.seasonId) ui.seasonId = seasonIdFromDate();
     if (seasons.indexOf(ui.seasonId) === -1 && seasons.length) ui.seasonId = seasons[0];
-    var tot = seasonTotals(ui.seasonId);
+    var tot = seasonTotals(ui.seasonId, ui.focusPlayer);
     var mode = ui.seasonMode || "totals";
     var html = '<div class="panel"><div class="panel-head"><h2>Season</h2></div>' +
       '<div class="fields">' +
@@ -976,17 +1076,19 @@ table.stats tr:last-child td{border-bottom:0}
     });
     html += "</tbody></table></div></div>";
 
-    var chartPlayer = ui.seasonChartPlayer || "all";
+    var chartPlayer = isAllFocus() ? (ui.seasonChartPlayer || "all") : ui.focusPlayer;
     var chartShots = chartPlayer === "all" ? tot.shots : tot.shots.filter(function (s) { return s.playerId === chartPlayer; });
     html += '<div class="panel"><h2>Season shot chart</h2>' +
       '<p class="hint">Every saved shot in ' + esc(ui.seasonId) + ". This chart is view-only.</p>" +
-      '<div class="chart-tools">' +
-        '<button type="button" class="btn ' + (chartPlayer === "all" ? "primary" : "") + '" data-act="season-chart" data-pid="all">All players</button>' +
-        tot.rows.map(function (row) {
-          return '<button type="button" class="btn ' + (chartPlayer === row.id ? "primary" : "") + '" data-act="season-chart" data-pid="' + esc(row.id) + '">' +
-            esc(playerLabel(row)) + "</button>";
-        }).join("") +
-      "</div>" +
+      (isAllFocus()
+        ? '<div class="chart-tools">' +
+          '<button type="button" class="btn ' + (chartPlayer === "all" ? "primary" : "") + '" data-act="season-chart" data-pid="all">All players</button>' +
+          tot.rows.map(function (row) {
+            return '<button type="button" class="btn ' + (chartPlayer === row.id ? "primary" : "") + '" data-act="season-chart" data-pid="' + esc(row.id) + '">' +
+              esc(playerLabel(row)) + "</button>";
+          }).join("") +
+        "</div>"
+        : "") +
       courtSvg(chartShots, null, false) +
       "</div>";
     return html;
@@ -1111,13 +1213,17 @@ table.stats tr:last-child td{border-bottom:0}
     var list = vids.files.filter(function (f) {
       var tag = videoGameId(f);
       if (gameId) return tag === gameId;
+      if (!isAllFocus()) {
+        var vg = data.games.find(function (g) { return g.id === tag; });
+        return !!(vg && gameHasPlayerActivity(vg, ui.focusPlayer));
+      }
       return !tag || !data.games.some(function (g) { return g.id === tag; });
     });
-    var html = '<div class="panel"><h2>' + (gameId ? "Videos from this game" : "Game videos") + "</h2>";
+    var html = '<div class="panel"><h2>' + (gameId ? "Videos from this game" : (isAllFocus() ? "Game videos" : "Videos")) + "</h2>";
     html += uploadBox(gameId || (sortedGames()[0] && sortedGames()[0].id) || "");
     if (!list.length) {
       html += '<p class="empty">' + (vids.status === "loading" && !vids.files.length ? "Loading videos…" :
-        vids.status === "error" ? vids.error : gameId ? "No videos for this game yet." : "No general videos yet.") + "</p>";
+        vids.status === "error" ? vids.error : gameId ? "No videos for this game yet." : (isAllFocus() ? "No general videos yet." : "No videos for this player yet.")) + "</p>";
     } else {
       html += '<div class="vid-grid">' + list.map(videoCard).join("") + "</div>";
     }
@@ -1242,11 +1348,15 @@ table.stats tr:last-child td{border-bottom:0}
       '<div class="actions"><button type="button" class="btn primary" data-act="add-highlight"' +
         (ui.hlUrl.trim() ? "" : " disabled") + ">Save link</button></div>" : "");
 
-    if (!data.highlights.length) {
-      html += '<p class="empty">No saved highlight links yet.</p></div>';
+    var hlList = data.highlights.slice().reverse();
+    if (!isAllFocus()) {
+      hlList = hlList.filter(function (item) { return item.playerId === ui.focusPlayer; });
+    }
+    if (!hlList.length) {
+      html += '<p class="empty">' + (data.highlights.length && !isAllFocus() ? "No saved highlight links for this player yet." : "No saved highlight links yet.") + "</p></div>";
       return html;
     }
-    var items = data.highlights.slice().reverse().map(function (item) {
+    var items = hlList.map(function (item) {
       var view = highlightEmbed(item.url);
       var href = safeHttpUrl(view.href);
       var embed = view.embed && safeHttpUrl(view.embed);
@@ -1290,6 +1400,7 @@ table.stats tr:last-child td{border-bottom:0}
     var tip = document.getElementById("installTip");
     if (tip) tip.classList.toggle("show", !!ui.showHint);
     renderHeader();
+    renderPlayerSwitch();
     bindDynamic();
   }
 
@@ -1438,6 +1549,13 @@ table.stats tr:last-child td{border-bottom:0}
     snap.id = keepId || game.id || newId();
     snap.savedAt = new Date().toISOString();
     if (data.seasons.indexOf(snap.season) === -1) data.seasons.push(snap.season);
+    var active = (snap.players || []).filter(function (p) { return playerHasStats(p, snap.shots); });
+    if (active.length) {
+      snap.players = active;
+      snap.shots = (snap.shots || []).filter(function (s) {
+        return active.some(function (p) { return p.id === s.playerId; });
+      });
+    }
     return snap;
   }
 
@@ -1553,6 +1671,7 @@ table.stats tr:last-child td{border-bottom:0}
     });
     ui.newName = "";
     ui.newNumber = "";
+    if (!isAllFocus()) setFocusPlayer(id);
     if (!existing) pushRoster();
     saveData();
     render();
@@ -1562,6 +1681,7 @@ table.stats tr:last-child td{border-bottom:0}
     data.current.players = data.current.players.filter(function (p) { return p.id !== id; });
     data.current.shots = data.current.shots.filter(function (s) { return s.playerId !== id; });
     if (ui.pending && ui.pending.playerId === id) ui.pending = null;
+    if (ui.focusPlayer === id) setFocusPlayer("all");
     saveData();
     render();
   }
@@ -1886,6 +2006,7 @@ table.stats tr:last-child td{border-bottom:0}
       saveData();
       render();
     }
+    else if (act === "focus-player") { setFocusPlayer(pid || "all"); render(); }
     else if (act === "season-mode") { ui.seasonMode = t.getAttribute("data-mode"); render(); }
     else if (act === "season-chart") { ui.seasonChartPlayer = pid; render(); }
     else if (act === "add-season") addSeason();
@@ -2256,6 +2377,7 @@ table.stats tr:last-child td{border-bottom:0}
     gamesSeason: "all",
     seasonMode: "totals",
     seasonChartPlayer: "all",
+    focusPlayer: "all",
     newName: "",
     newNumber: "",
     hlTitle: "",
@@ -2266,6 +2388,7 @@ table.stats tr:last-child td{border-bottom:0}
     showHint: true
   };
   try { if (localStorage.getItem(HINT_KEY) === "1") ui.showHint = false; } catch (e) {}
+  ui.focusPlayer = loadFocusPlayer();
 
   document.addEventListener("click", onClick);
   document.getElementById("codeForm").addEventListener("submit", function (e) {
