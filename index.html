@@ -101,6 +101,21 @@ table.stats tr:last-child td{border-bottom:0}
 .hl-item:first-of-type{border-top:0}
 .hl-meta{font-weight:700;margin-bottom:4px}
 .hl-item a{color:var(--accent);overflow-wrap:anywhere}
+.vid-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:8px}
+.vid-card{border:1px solid var(--rule);border-radius:10px;overflow:hidden;background:var(--card,#fff)}
+.vid-card.playing{grid-column:1/-1}
+.vid-thumb{display:block;width:100%;aspect-ratio:16/9;background:#111;border:0;padding:0;cursor:pointer;position:relative;color:#fff;font-size:28px}
+.vid-thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.vid-thumb span{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;text-shadow:0 1px 4px #000}
+.vid-card iframe{display:block;width:100%;aspect-ratio:16/9;border:0;background:#111}
+.vid-info{padding:6px 8px;font-size:13px}
+.vid-info b{display:block;overflow-wrap:anywhere}
+.vid-info select{width:100%;margin-top:4px;font-size:13px}
+.vid-info a{color:var(--accent)}
+.upload-box{border:1px dashed var(--rule);border-radius:10px;padding:10px;margin:10px 0}
+.upload-bar{height:10px;border-radius:5px;background:var(--rule);overflow:hidden;margin-top:8px}
+.upload-bar div{height:100%;background:var(--accent);transition:width .3s}
+.g-vids{font-size:12px;color:var(--accent);margin-left:6px}
 .hl-item iframe,.local-video video{display:block;width:100%;aspect-ratio:16/9;height:auto;border:0;border-radius:8px;background:#111;margin:8px 0}
 .seg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
 .seg .btn{flex:1 1 6rem}
@@ -193,6 +208,14 @@ table.stats tr:last-child td{border-bottom:0}
   var BASE = "/basketball-stats/";
   var EDITOR_KEY = "bball-stats-editor-v1";
   var MIGRATED_KEY = "bball-stats-cloud-migrated-v1";
+  var CODE_KEY = "bball-stats-code-v1";
+  /* ---- Highlights videos (Google Drive folder via Apps Script web app) ----
+     Paste the Apps Script web app URL (ends in /exec) between the quotes below. */
+  var HIGHLIGHTS_SCRIPT_URL = "";
+  var HIGHLIGHTS_FOLDER_URL = "https://drive.google.com/drive/folders/1koXp-d7j9SV8QZvT4Ev4eLIYz0RLOhgj";
+  var MAX_UPLOAD_BYTES = 1024 * 1024 * 1024; // 1 GB per video
+  var UPLOAD_CHUNK = 8 * 1024 * 1024;        // multiple of 256 KB
+  var VIDEO_CACHE_KEY = "bball-stats-videos-v1";
 
   var COURT_W = 50;
   var COURT_H = 42;
@@ -864,7 +887,7 @@ table.stats tr:last-child td{border-bottom:0}
           '<div class="g-date">' + esc(formatDate(g.date)) + (g.season ? " · " + esc(g.season) : "") + "</div>" +
           '<div class="g-opp">' + (g.opponent ? "vs " + esc(g.opponent) : "No opponent listed") +
             (localOnly ? '<span class="local-tag">On this device only</span>' : "") + "</div>" +
-          '<div class="g-line">' + esc(gameSummaryLine(g)) + "</div>" +
+          '<div class="g-line">' + esc(gameSummaryLine(g)) + (videoCountFor(g.id) ? '<span class="g-vids">🎬 ' + videoCountFor(g.id) + "</span>" : "") + "</div>" +
         "</button>" +
         (cloud.editor
           ? '<button type="button" class="btn small danger' + (armed ? " armed" : "") + '" data-act="delete-game" data-gid="' + esc(g.id) + '">' +
@@ -981,6 +1004,214 @@ table.stats tr:last-child td{border-bottom:0}
     return "Player";
   }
 
+  /* ---------- Drive videos ---------- */
+  var vids = { status: "idle", files: [], loadedAt: 0, error: "" };
+  var driveTags = {};
+  var upload = { busy: false, pct: 0, msg: "", ok: false, gameId: null };
+  try {
+    var vc = JSON.parse(localStorage.getItem(VIDEO_CACHE_KEY) || "null");
+    if (vc && Array.isArray(vc.files)) { vids.files = vc.files; vids.status = "cached"; }
+  } catch (e) {}
+
+  function loadVideos(force) {
+    if (!HIGHLIGHTS_SCRIPT_URL) return;
+    if (vids.status === "loading") return;
+    if (!force && vids.loadedAt && Date.now() - vids.loadedAt < 60000) return;
+    vids.status = "loading";
+    fetch(HIGHLIGHTS_SCRIPT_URL + "?action=list&t=" + Date.now())
+      .then(function (r) { return r.json(); })
+      .then(function (j) {
+        if (!j || !j.ok) throw new Error((j && j.error) || "List failed");
+        vids.files = (j.files || []).filter(function (f) { return f && typeof f.id === "string" && /^[A-Za-z0-9_-]+$/.test(f.id); });
+        vids.status = "ok";
+        vids.loadedAt = Date.now();
+        vids.error = "";
+        try { localStorage.setItem(VIDEO_CACHE_KEY, JSON.stringify({ files: vids.files })); } catch (e) {}
+        softRender();
+      })
+      .catch(function (err) {
+        vids.status = "error";
+        vids.loadedAt = Date.now();
+        vids.error = "Couldn't load videos right now.";
+        softRender();
+      });
+  }
+
+  function videoGameId(f) {
+    if (Object.prototype.hasOwnProperty.call(driveTags, f.id)) return driveTags[f.id] || "";
+    return f.gameId || "";
+  }
+
+  function sortedGames() {
+    return data.games.slice().sort(function (a, b) {
+      return String(b.date || "").localeCompare(String(a.date || "")) || String(b.savedAt || "").localeCompare(String(a.savedAt || ""));
+    });
+  }
+
+  function gameName(g) {
+    return formatDate(g.date) + (g.opponent ? " vs " + g.opponent : "");
+  }
+
+  function gameOptions(selected, blankLabel) {
+    return '<option value="">' + esc(blankLabel) + "</option>" + sortedGames().map(function (g) {
+      return '<option value="' + esc(g.id) + '"' + (selected === g.id ? " selected" : "") + ">" + esc(gameName(g)) + "</option>";
+    }).join("");
+  }
+
+  function fmtSize(n) {
+    n = +n || 0;
+    return n >= 1048576 ? (n / 1048576).toFixed(n >= 104857600 ? 0 : 1) + " MB" : Math.max(1, Math.round(n / 1024)) + " KB";
+  }
+
+  function videoCard(f) {
+    var playing = ui.playVideo === f.id;
+    var created = f.created ? new Date(f.created).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }) : "";
+    var html = '<div class="vid-card' + (playing ? " playing" : "") + '">';
+    if (playing) {
+      html += '<iframe src="https://drive.google.com/file/d/' + esc(f.id) + '/preview" title="' + esc(f.name) + '" allow="autoplay; fullscreen"></iframe>';
+    } else {
+      html += '<button type="button" class="vid-thumb" data-act="play-video" data-vid="' + esc(f.id) + '" aria-label="Play ' + esc(f.name) + '">' +
+        '<img src="https://drive.google.com/thumbnail?id=' + esc(f.id) + '&amp;sz=w480" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' +
+        "<span>▶</span></button>";
+    }
+    html += '<div class="vid-info"><b>' + esc(f.name) + "</b>" + esc(created) +
+      (playing ? ' · <a href="#" data-act="stop-video">Close</a>' : "") +
+      ' · <a href="https://drive.google.com/file/d/' + esc(f.id) + '/view" target="_blank" rel="noopener noreferrer">Open</a>';
+    if (cloud.editor) {
+      html += '<select data-vidtag="' + esc(f.id) + '" aria-label="Game for this video">' + gameOptions(videoGameId(f), "Not tied to a game") + "</select>";
+    }
+    html += "</div></div>";
+    return html;
+  }
+
+  function uploadBox(defaultGameId) {
+    if (!HIGHLIGHTS_SCRIPT_URL) return "";
+    if (!cloud.editor) {
+      return '<div class="viewonly-note" style="margin-top:.5rem"><span>Uploading videos needs the team code.</span><button type="button" class="btn small" data-act="team-code">🔒 Enter team code</button></div>';
+    }
+    var gid = upload.gameId != null ? upload.gameId : defaultGameId;
+    var html = '<div class="upload-box"><div class="caption">Upload a video</div>' +
+      '<label class="field"><span>Game</span><select id="upGame">' + gameOptions(gid, "No game (general highlight)") + "</select></label>" +
+      '<div class="actions"><button type="button" class="btn primary" data-act="upload-video"' + (upload.busy ? " disabled" : "") + ">" +
+      (upload.busy ? "Uploading… " + upload.pct + "%" : "⬆ Upload video") + "</button></div>" +
+      '<input type="file" id="upFile" accept="video/*" hidden>';
+    if (upload.busy) html += '<div class="upload-bar"><div style="width:' + upload.pct + '%"></div></div>';
+    if (upload.msg) html += '<p class="hint" style="color:' + (upload.ok ? "var(--accent)" : "#c0392b") + '">' + esc(upload.msg) + "</p>";
+    html += '<p class="hint">Up to 1 GB per video. Keep the app open until it finishes.</p></div>';
+    return html;
+  }
+
+  function renderVideosSection(gameId) {
+    // gameId: a game's id to show that game's videos; null for the general list (videos not tied to a game).
+    if (!HIGHLIGHTS_SCRIPT_URL) {
+      return gameId ? "" : '<div class="panel"><h2>Game videos</h2><p class="hint">Videos live in the shared Basketball Highlights folder in Google Drive.</p>' +
+        '<div class="actions"><a class="btn" href="' + esc(HIGHLIGHTS_FOLDER_URL) + '" target="_blank" rel="noopener noreferrer">Open highlights folder</a></div></div>';
+    }
+    loadVideos(false);
+    var list = vids.files.filter(function (f) {
+      var tag = videoGameId(f);
+      if (gameId) return tag === gameId;
+      return !tag || !data.games.some(function (g) { return g.id === tag; });
+    });
+    var html = '<div class="panel"><h2>' + (gameId ? "Videos from this game" : "Game videos") + "</h2>";
+    html += uploadBox(gameId || (sortedGames()[0] && sortedGames()[0].id) || "");
+    if (!list.length) {
+      html += '<p class="empty">' + (vids.status === "loading" && !vids.files.length ? "Loading videos…" :
+        vids.status === "error" ? vids.error : gameId ? "No videos for this game yet." : "No general videos yet.") + "</p>";
+    } else {
+      html += '<div class="vid-grid">' + list.map(videoCard).join("") + "</div>";
+    }
+    html += '<div class="actions" style="margin-top:8px"><button type="button" class="btn small" data-act="refresh-videos">↻ Refresh</button>' +
+      '<a class="btn small" href="' + esc(HIGHLIGHTS_FOLDER_URL) + '" target="_blank" rel="noopener noreferrer">Open Drive folder</a></div></div>';
+    return html;
+  }
+
+  function videoCountFor(gameId) {
+    if (!HIGHLIGHTS_SCRIPT_URL) return 0;
+    return vids.files.filter(function (f) { return videoGameId(f) === gameId; }).length;
+  }
+
+  function scriptPost(body) {
+    return fetch(HIGHLIGHTS_SCRIPT_URL, { method: "POST", body: JSON.stringify(body) })
+      .then(function (r) { return r.json(); })
+      .then(function (j) { if (!j || !j.ok) throw new Error((j && j.error) || "Upload failed"); return j; });
+  }
+
+  function readChunkB64(blob) {
+    return new Promise(function (resolve, reject) {
+      var fr = new FileReader();
+      fr.onload = function () { var s = String(fr.result); resolve(s.slice(s.indexOf(",") + 1)); };
+      fr.onerror = function () { reject(new Error("Couldn't read the video")); };
+      fr.readAsDataURL(blob);
+    });
+  }
+
+  function startUpload(file) {
+    var code = "";
+    try { code = localStorage.getItem(CODE_KEY) || ""; } catch (e) {}
+    if (!code) {
+      showBanner("Enter the team code once more to turn on uploads on this device.");
+      openCodeDialog();
+      return;
+    }
+    if (!file) return;
+    if (file.size > MAX_UPLOAD_BYTES) {
+      upload.msg = "That video is " + fmtSize(file.size) + ". The limit is 1 GB, so trim it or add it from the Google Drive app.";
+      upload.ok = false;
+      render();
+      return;
+    }
+    var sel = document.getElementById("upGame");
+    var gameId = sel ? sel.value : "";
+    upload.busy = true; upload.pct = 0; upload.msg = ""; upload.ok = false;
+    render();
+    var mime = /^video\//.test(file.type) ? file.type : "video/mp4";
+    scriptPost({ action: "start", code: code, name: file.name || "Highlight.mp4", mimeType: mime, size: file.size, gameId: gameId })
+      .then(function (j) {
+        var session = j.session;
+        function next(start) {
+          if (start >= file.size) throw new Error("Upload didn't finish");
+          var piece = file.slice(start, Math.min(file.size, start + UPLOAD_CHUNK));
+          return readChunkB64(piece).then(function (b64) {
+            return scriptPost({ action: "chunk", code: code, session: session, start: start, total: file.size, data: b64 });
+          }).then(function (r) {
+            if (r.done) return r;
+            upload.pct = Math.min(99, Math.round((r.next / file.size) * 100));
+            softRender();
+            return next(r.next);
+          });
+        }
+        return next(0);
+      })
+      .then(function (r) {
+        if (gameId && window.Cloud && window.Cloud.tagVideo) window.Cloud.tagVideo(r.id, gameId).catch(function () {});
+        if (gameId) driveTags[r.id] = gameId;
+        vids.files.unshift({ id: r.id, name: file.name || "Highlight", created: new Date().toISOString(), gameId: gameId });
+        upload.busy = false; upload.pct = 100; upload.ok = true;
+        upload.msg = "Uploaded. Drive may take a minute to finish processing before it plays.";
+        render();
+        setTimeout(function () { loadVideos(true); }, 4000);
+      })
+      .catch(function (err) {
+        upload.busy = false; upload.ok = false;
+        var m = String(err && err.message || "");
+        if (/wrong code/i.test(m)) {
+          try { localStorage.removeItem(CODE_KEY); } catch (e) {}
+          upload.msg = "The team code didn't match. Enter it again and retry.";
+        } else {
+          upload.msg = "Upload failed. Check your connection and try again." + (m ? " (" + m + ")" : "");
+        }
+        render();
+      });
+  }
+
+  function tagVideo(fileId, gameId) {
+    if (!cloud.editor || !window.Cloud) return;
+    driveTags[fileId] = gameId || "";
+    window.Cloud.tagVideo(fileId, gameId || "").catch(function (err) { handleWriteError(err); });
+    softRender();
+  }
+
   function renderHighlights() {
     var opts = [{ id: "team", name: "Team", number: "" }].concat(data.roster);
     data.current.players.forEach(function (p) {
@@ -1050,8 +1281,8 @@ table.stats tr:last-child td{border-bottom:0}
     var html = "";
     if (ui.tab === "games") html = renderGames();
     else if (ui.tab === "season") html = renderSeason();
-    else if (ui.tab === "highlights") html = renderHighlights();
-    else html = renderGame();
+    else if (ui.tab === "highlights") html = renderVideosSection(null) + renderHighlights();
+    else html = renderGame() + (data.current && data.current.id ? renderVideosSection(data.current.id) : "");
     main.innerHTML = html;
     document.querySelectorAll(".tab").forEach(function (btn) {
       btn.classList.toggle("active", btn.getAttribute("data-tab") === ui.tab);
@@ -1144,6 +1375,16 @@ table.stats tr:last-child td{border-bottom:0}
         pushRoster();
         render();
       });
+    });
+    bindField("upGame", function (v) { upload.gameId = v; });
+    var upf = document.getElementById("upFile");
+    if (upf) upf.addEventListener("change", function () {
+      var f = upf.files && upf.files[0];
+      upf.value = "";
+      startUpload(f);
+    });
+    document.querySelectorAll("select[data-vidtag]").forEach(function (el) {
+      el.addEventListener("change", function () { tagVideo(el.getAttribute("data-vidtag"), el.value); });
     });
     var lv = document.getElementById("localVideo");
     if (lv) {
@@ -1648,6 +1889,15 @@ table.stats tr:last-child td{border-bottom:0}
     else if (act === "season-mode") { ui.seasonMode = t.getAttribute("data-mode"); render(); }
     else if (act === "season-chart") { ui.seasonChartPlayer = pid; render(); }
     else if (act === "add-season") addSeason();
+    else if (act === "play-video") { ui.playVideo = t.getAttribute("data-vid"); render(); }
+    else if (act === "stop-video") { e.preventDefault(); ui.playVideo = null; render(); }
+    else if (act === "refresh-videos") { loadVideos(true); render(); }
+    else if (act === "upload-video") {
+      var code = "";
+      try { code = localStorage.getItem(CODE_KEY) || ""; } catch (err) {}
+      if (!code) { showBanner("Enter the team code once more to turn on uploads on this device."); openCodeDialog(); }
+      else { var uf = document.getElementById("upFile"); if (uf) uf.click(); }
+    }
     else if (act === "add-highlight") addHighlight();
     else if (act === "remove-highlight") removeHighlight(t.getAttribute("data-hid"));
     else if (act === "team-code") {
@@ -1886,6 +2136,7 @@ table.stats tr:last-child td{border-bottom:0}
       codeBusy = false;
       btn.disabled = false;
       setEditor(true);
+      try { localStorage.setItem(CODE_KEY, code); } catch (e) {}
       closeCodeDialog();
       showBanner("Editing unlocked on this device. Games you save now show up everywhere.", "ok");
       flushPending();
@@ -1974,6 +2225,7 @@ table.stats tr:last-child td{border-bottom:0}
       if (fromCache && !doc && !cloud.gotHighlights) return;
       cloud.gotHighlights = true;
       cloudHighlightsRaw = doc && Array.isArray(doc.items) ? doc.items : [];
+      driveTags = doc && doc.driveTags && typeof doc.driveTags === "object" ? doc.driveTags : {};
       rebuildHighlights();
       saveData();
       flushPending();
@@ -2106,6 +2358,11 @@ table.stats tr:last-child td{border-bottom:0}
     addHighlights: function (items) {
       if (!items.length) return Promise.resolve();
       return F.setDoc(F.doc(db, "meta", "highlights"), { items: F.arrayUnion.apply(null, items) }, { merge: true });
+    },
+    tagVideo: function (fileId, gameId) {
+      var tags = {};
+      tags[fileId] = gameId || "";
+      return F.setDoc(F.doc(db, "meta", "highlights"), { driveTags: tags }, { merge: true });
     },
     removeHighlight: function (item) {
       return F.setDoc(F.doc(db, "meta", "highlights"), { items: F.arrayRemove(item) }, { merge: true });
