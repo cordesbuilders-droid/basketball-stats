@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Game Stats</title>
+  <meta name="description" content="Track basketball games, season totals, shot charts, and highlight clips. Works offline on your phone.">
+  <meta name="theme-color" content="#1f6f4a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Game Stats">
+  <link rel="manifest" href="/basketball-stats/manifest.json">
+  <link rel="icon" type="image/png" sizes="192x192" href="/basketball-stats/icons/icon-192.png">
+  <link rel="icon" type="image/png" sizes="512x512" href="/basketball-stats/icons/icon-512.png">
+  <link rel="apple-touch-icon" href="/basketball-stats/icons/apple-touch-icon.png">
+  <link rel="icon" type="image/svg+xml" href="/basketball-stats/icons/icon.svg">
+  <style>
+:root{
+  --accent:#1f6f4a;--accent-dark:#175538;--accent-soft:#e8f3ed;
+  --ink:#1d2730;--muted:#5d6b77;--rule:#d8dee3;--bg:#f3f5f4;
+  --warn:#9a5b00;--warn-soft:#fff6e5;--danger:#a3322b;
+  --court:#f0e6d2;--court-line:#5a4a38;--make:#1f6f4a;--miss:#a3322b;
+  --safe-top:env(safe-area-inset-top,0px);
+  --safe-bot:env(safe-area-inset-bottom,0px);
+}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%;height:100%}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,"Noto Sans",sans-serif;font-size:15px;line-height:1.5;color:var(--ink);background:var(--bg);min-height:100%}
+button,input,select,textarea{font:inherit;color:inherit}
+h1,h2,h3{line-height:1.2}
+button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+.app-header{background:#fff;border-bottom:1px solid var(--rule);position:sticky;top:0;z-index:20;padding-top:var(--safe-top)}
+.app-header .row{max-width:780px;margin:0 auto;padding:10px 16px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center}
+.brand{font-weight:800;color:var(--accent);font-size:17px;letter-spacing:-.2px;margin-right:auto;display:flex;align-items:center;gap:8px}
+.brand img{width:28px;height:28px;border-radius:7px;display:block}
+.brand small{color:var(--muted);font-weight:500;font-size:12px}
+.tools{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.tabs{max-width:780px;margin:0 auto;padding:0 8px;display:flex;gap:2px;overflow-x:auto;scrollbar-width:thin;-webkit-overflow-scrolling:touch}
+.tab{border:0;background:none;padding:10px 14px;font-weight:650;color:var(--muted);border-bottom:3px solid transparent;cursor:pointer;white-space:nowrap;flex:1 0 auto;min-height:44px}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.btn{border:1px solid var(--rule);background:#fff;border-radius:8px;padding:8px 12px;cursor:pointer;font-weight:600;font-size:14px;white-space:nowrap;min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:6px}
+.btn:hover{border-color:var(--accent);color:var(--accent)}
+.btn:disabled{opacity:.45;cursor:default;border-color:var(--rule);color:var(--muted)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.btn.primary:hover{background:var(--accent-dark);color:#fff}
+.btn.small{padding:6px 10px;font-size:13px;min-height:40px}
+.btn.danger:hover,.btn.danger.armed{border-color:var(--danger);color:var(--danger)}
+.btn.danger.armed{background:#fdecea}
+.btn.link{border:0;background:none;color:var(--accent);padding:2px 4px;text-decoration:underline;min-height:0}
+.banner{max-width:780px;margin:10px auto 0;padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);border:1px solid #f0d49a;display:none}
+.banner.show{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
+.banner.ok{background:var(--accent-soft);color:var(--accent-dark);border-color:#b7d7c6}
+.banner .tip-x{flex:none}
+main{max-width:780px;margin:0 auto;padding:16px 16px calc(28px + var(--safe-bot))}
+.panel{background:#fff;border:1px solid var(--rule);border-radius:12px;padding:16px;margin-bottom:14px}
+.panel>h2{font-size:17px;margin:0 0 4px;display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.panel>h2 .num{background:var(--accent);color:#fff;border-radius:50%;min-width:28px;height:28px;padding:0 7px;display:inline-grid;place-items:center;font-size:13px;flex:none}
+.panel .hint{color:var(--muted);font-size:13px;margin:0 0 12px}
+.panel-head{display:flex;align-items:center;gap:8px;margin:0 0 12px}
+.panel-head h2{margin:0;flex:1}
+.fields{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px 14px}
+.field{display:flex;flex-direction:column;gap:3px;min-width:0}
+.field>span{font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.field input,.field select,.field textarea{border:1px solid #c9d1d8;border-radius:7px;padding:9px 10px;background:#fff;width:100%;min-width:0;min-height:44px}
+.field input:focus,.field select:focus,.field textarea:focus{outline:2px solid rgba(31,111,74,.35);border-color:var(--accent)}
+.field.wide{grid-column:1/-1}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:12px}
+.caption{width:100%;margin:0 0 8px;font-size:12px;font-weight:650;color:var(--muted);text-transform:uppercase;letter-spacing:.4px}
+.shortcuts{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.shortcuts .btn{flex:1 1 4.6rem}
+.grid-stats{display:grid;grid-template-columns:1fr 1fr;gap:12px 10px}
+.stepper{display:flex;align-items:center;gap:6px;width:100%}
+.stepper .lab{width:100%;font-size:12px;font-weight:650;color:var(--muted);letter-spacing:.3px;margin-bottom:2px}
+.stepper .row{display:flex;align-items:center;gap:6px;width:100%}
+.stepper .pm{flex:1 1 2.75rem;min-width:44px;min-height:44px;font-size:1.35rem;font-weight:700;line-height:1;padding:0}
+.stepper .val{flex:1 1 2.6rem;min-width:2.2rem;text-align:center;font-size:1.25rem;font-weight:700}
+.pcts{display:flex;flex-wrap:wrap;gap:12px;margin-top:12px;color:var(--muted);font-size:14px;font-weight:600}
+.pcts strong{color:var(--ink)}
+.chart-tools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
+.chart-tools .btn{flex:1 1 7rem}
+.court{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:8px;background:var(--court)}
+.edit-banner{font-size:14px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #b7d7c6;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.edit-banner span{flex:1}
+.game-card{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--rule)}
+.game-card:last-child{border-bottom:0}
+.game-main{flex:1;min-width:0;border:0;background:none;text-align:left;cursor:pointer;padding:0;min-height:44px}
+.game-main:hover .g-date{color:var(--accent)}
+.g-date{font-weight:750}
+.g-opp{color:var(--ink)}
+.g-line{color:var(--muted);font-size:13px;margin-top:2px}
+.empty{color:var(--muted);padding:18px 4px;text-align:center}
+.table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
+table.stats{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+table.stats th,table.stats td{padding:8px 8px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
+table.stats th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);font-weight:700}
+table.stats th:first-child,table.stats td:first-child{text-align:left;position:sticky;left:0;background:#fff;padding-left:10px;font-weight:700}
+table.stats tr:last-child td{border-bottom:0}
+.hl-item{border-top:1px solid var(--rule);padding:12px 0}
+.hl-item:first-of-type{border-top:0}
+.hl-meta{font-weight:700;margin-bottom:4px}
+.hl-item a{color:var(--accent);overflow-wrap:anywhere}
+.hl-item iframe,.local-video video{display:block;width:100%;aspect-ratio:16/9;height:auto;border:0;border-radius:8px;background:#111;margin:8px 0}
+.seg{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 12px}
+.seg .btn{flex:1 1 6rem}
+#fileImport{display:none}
+.muted{color:var(--muted)}
+@media (max-width:640px){
+  input,select,textarea{font-size:16px}
+  .brand small{display:none}
+  .grid-stats{grid-template-columns:1fr 1fr}
+}
+@media (pointer:coarse){
+  .btn,.tab,input,select{min-height:44px}
+}
+
+  </style>
+</head>
+<body>
+  <header class="app-header">
+    <div class="row">
+      <div class="brand">
+        <img src="/basketball-stats/icons/icon-192.png" width="28" height="28" alt="">
+        Game Stats <small>works offline</small>
+      </div>
+      <div class="tools">
+        <button type="button" class="btn" data-act="export-json">Export JSON</button>
+        <button type="button" class="btn" data-act="export-csv">Export CSV</button>
+        <button type="button" class="btn" data-act="import">Import</button>
+        <input type="file" id="fileImport" accept=".json,application/json">
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <button type="button" class="tab active" data-tab="game">Game</button>
+      <button type="button" class="tab" data-tab="games">Games</button>
+      <button type="button" class="tab" data-tab="season">Season</button>
+      <button type="button" class="tab" data-tab="highlights">Highlights</button>
+    </nav>
+  </header>
+  <div id="installTip" class="banner tip" role="note">
+    <span>Add this to your Home Screen to use it like an app. iPhone: open in Safari, tap Share, then Add to Home Screen. Android: in Chrome, tap the menu, then Add to Home screen. Games are saved on this phone — use Export to share them.</span>
+    <button type="button" class="btn tip-x small" data-act="dismiss-hint" aria-label="Dismiss">Got it</button>
+  </div>
+  <div id="banner" class="banner" role="status" aria-live="polite"></div>
+  <main id="main"></main>
+  <script>
+/* Game Stats — phone-first basketball tracker */
+(function () {
+  "use strict";
+
+  var STORAGE_KEY = "bball-stats-v1";
+  var HINT_KEY = "bball-stats-hint-v1";
+  var BASE = "/basketball-stats/";
+
+  var COURT_W = 50;
+  var COURT_H = 42;
+  var HOOP_X = 25;
+  var HOOP_Y = 5.25;
+  var THREE_R = 19.75;
+  var THREE_DX = Math.sqrt(THREE_R * THREE_R - HOOP_Y * HOOP_Y);
+
+  var LABELS = {
+    pts: "PTS", reb: "REB", ast: "AST", stl: "STL",
+    blk: "BLK", to: "TO", min: "MIN",
+    fgm: "FGM", fga: "FGA", tpm: "3PM", tpa: "3PA", ftm: "FTM", fta: "FTA"
+  };
+  var SIMPLE_STATS = ["pts", "reb", "ast", "stl", "blk", "to", "min"];
+  var SHOOTING_PAIRS = [["fgm", "fga"], ["tpm", "tpa"], ["ftm", "fta"]];
+  var ALL_KEYS = SIMPLE_STATS.concat(["fgm", "fga", "tpm", "tpa", "ftm", "fta"]);
+
+  function emptyStats() {
+    return {
+      pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0,
+      fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, min: 0
+    };
+  }
+
+  function todayInEastern() {
+    return new Intl.DateTimeFormat("en-CA", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit"
+    }).format(new Date());
+  }
+
+  function easternParts(date) {
+    var parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: "America/New_York",
+      year: "numeric",
+      month: "numeric",
+      day: "numeric"
+    }).formatToParts(date || new Date());
+    var map = {};
+    parts.forEach(function (p) { map[p.type] = p.value; });
+    return { year: +map.year, month: +map.month, day: +map.day };
+  }
+
+  function seasonIdFromDate(iso) {
+    var y, m;
+    if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+      y = +iso.slice(0, 4);
+      m = +iso.slice(5, 7);
+    } else {
+      var p = easternParts(new Date());
+      y = p.year;
+      m = p.month;
+    }
+    if (m >= 11) return y + "-" + String(y + 1).slice(-2);
+    if (m <= 3) return (y - 1) + "-" + String(y).slice(-2);
+    return y + "-" + String(y + 1).slice(-2);
+  }
+
+  function defaultRoster() {
+    return [
+      { id: "juni", name: "Juni", number: "" },
+      { id: "ezra", name: "Ezra", number: "" }
+    ];
+  }
+
+  function newId() {
+    return "id-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+  }
+
+  function jerseyNumber(value) {
+    return String(value || "").trim().replace(/^#+/, "");
+  }
+
+  function playerLabel(player) {
+    var n = jerseyNumber(player.number);
+    return n ? ("#" + n + " " + player.name) : player.name;
+  }
+
+  function pct(made, attempted) {
+    if (attempted <= 0) return "—";
+    return Math.round((made / attempted) * 100) + "%";
+  }
+
+  function avg(total, gp, digits) {
+    if (!gp) return "—";
+    var n = total / gp;
+    return n.toFixed(digits == null ? 1 : digits);
+  }
+
+  function isThreePoint(x, y) {
+    var dx = x - HOOP_X;
+    var dy = y - HOOP_Y;
+    return dx * dx + dy * dy >= THREE_R * THREE_R;
+  }
+
+  function shotKind(made, three) {
+    if (made) return three ? "make3" : "make2";
+    return three ? "miss3" : "miss2";
+  }
+
+  function clampBump(stats, key, delta) {
+    var next = Object.assign({}, stats);
+    var madeOf = { fga: "fgm", tpa: "tpm", fta: "ftm" };
+    var attOf = { fgm: "fga", tpm: "tpa", ftm: "fta" };
+    var attKey = attOf[key];
+    var madeKey = madeOf[key];
+    if (attKey) {
+      var made = Math.max(0, next[key] + delta);
+      next[key] = made;
+      if (delta > 0 && next[attKey] < made) next[attKey] = made;
+      return next;
+    }
+    if (madeKey) {
+      next[key] = Math.max(next[madeKey], next[key] + delta);
+      return next;
+    }
+    next[key] = Math.max(0, next[key] + delta);
+    return next;
+  }
+
+  function applyShot(stats, kind) {
+    var next = Object.assign({}, stats);
+    if (kind === "make2") { next.pts += 2; next.fgm += 1; next.fga += 1; }
+    else if (kind === "make3") { next.pts += 3; next.fgm += 1; next.fga += 1; next.tpm += 1; next.tpa += 1; }
+    else if (kind === "make1") { next.pts += 1; next.ftm += 1; next.fta += 1; }
+    else if (kind === "miss2") { next.fga += 1; }
+    else if (kind === "miss3") { next.fga += 1; next.tpa += 1; }
+    else { next.fta += 1; }
+    return next;
+  }
+
+  function revertShot(stats, kind) {
+    var next = Object.assign({}, stats);
+    if (kind === "make2") {
+      next.pts = Math.max(0, next.pts - 2);
+      next.fgm = Math.max(0, next.fgm - 1);
+      next.fga = Math.max(next.fgm, next.fga - 1);
+    } else if (kind === "make3") {
+      next.pts = Math.max(0, next.pts - 3);
+      next.fgm = Math.max(0, next.fgm - 1);
+      next.fga = Math.max(next.fgm, next.fga - 1);
+      next.tpm = Math.max(0, next.tpm - 1);
+      next.tpa = Math.max(next.tpm, next.tpa - 1);
+    } else if (kind === "make1") {
+      next.pts = Math.max(0, next.pts - 1);
+      next.ftm = Math.max(0, next.ftm - 1);
+      next.fta = Math.max(next.ftm, next.fta - 1);
+    } else if (kind === "miss2") {
+      next.fga = Math.max(next.fgm, next.fga - 1);
+    } else if (kind === "miss3") {
+      next.fga = Math.max(next.fgm, next.fga - 1);
+      next.tpa = Math.max(next.tpm, next.tpa - 1);
+    } else {
+      next.fta = Math.max(next.ftm, next.fta - 1);
+    }
+    return next;
+  }
+
+  function asStats(value) {
+    if (typeof value !== "object" || value === null) return null;
+    var next = emptyStats();
+    for (var i = 0; i < ALL_KEYS.length; i++) {
+      var key = ALL_KEYS[i];
+      if (typeof value[key] !== "number" || !isFinite(value[key])) return null;
+      next[key] = value[key];
+    }
+    return next;
+  }
+
+  function clone(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function playersFromRoster(roster) {
+    return (roster || defaultRoster()).map(function (p) {
+      return {
+        id: p.id,
+        name: p.name,
+        number: jerseyNumber(p.number),
+        stats: emptyStats()
+      };
+    });
+  }
+
+  function freshGame(roster, season) {
+    var date = todayInEastern();
+    return {
+      id: null,
+      season: season || seasonIdFromDate(date),
+      date: date,
+      opponent: "",
+      players: playersFromRoster(roster),
+      shots: []
+    };
+  }
+
+  function defaultData() {
+    var roster = defaultRoster();
+    var season = seasonIdFromDate();
+    return {
+      version: 1,
+      roster: roster,
+      seasons: [season],
+      current: freshGame(roster, season),
+      live: null,
+      games: [],
+      highlights: []
+    };
+  }
+
+  function normalizePlayer(item) {
+    if (typeof item !== "object" || item === null) return null;
+    if (typeof item.id !== "string" || typeof item.name !== "string") return null;
+    var stats = item.stats ? asStats(item.stats) : emptyStats();
+    if (!stats) return null;
+    return {
+      id: item.id,
+      name: item.name,
+      number: typeof item.number === "string" ? item.number : "",
+      stats: stats
+    };
+  }
+
+  function normalizeShot(item) {
+    if (typeof item !== "object" || item === null) return null;
+    if (typeof item.id !== "string" || typeof item.playerId !== "string") return null;
+    if (typeof item.x !== "number" || typeof item.y !== "number") return null;
+    return {
+      id: item.id,
+      playerId: item.playerId,
+      x: item.x,
+      y: item.y,
+      made: !!item.made,
+      isThree: !!item.isThree
+    };
+  }
+
+  function normalizeGame(item, fallbackSeason) {
+    if (typeof item !== "object" || item === null) return null;
+    if (typeof item.date !== "string") return null;
+    if (!Array.isArray(item.players)) return null;
+    var players = [];
+    for (var i = 0; i < item.players.length; i++) {
+      var p = normalizePlayer(item.players[i]);
+      if (!p) return null;
+      players.push(p);
+    }
+    var shots = [];
+    if (Array.isArray(item.shots)) {
+      for (var j = 0; j < item.shots.length; j++) {
+        var s = normalizeShot(item.shots[j]);
+        if (s) shots.push(s);
+      }
+    }
+    return {
+      id: typeof item.id === "string" && item.id ? item.id : newId(),
+      season: typeof item.season === "string" && item.season ? item.season : (fallbackSeason || seasonIdFromDate(item.date)),
+      date: item.date,
+      opponent: typeof item.opponent === "string" ? item.opponent : "",
+      players: players,
+      shots: shots,
+      savedAt: typeof item.savedAt === "string" ? item.savedAt : undefined
+    };
+  }
+
+  function normalizeHighlight(item) {
+    if (typeof item !== "object" || item === null) return null;
+    if (typeof item.id !== "string" || typeof item.url !== "string") return null;
+    return {
+      id: item.id,
+      title: typeof item.title === "string" ? item.title : "Highlight",
+      playerId: typeof item.playerId === "string" ? item.playerId : "team",
+      date: typeof item.date === "string" ? item.date : todayInEastern(),
+      url: item.url
+    };
+  }
+
+  function normalizeData(raw) {
+    if (typeof raw !== "object" || raw === null) return defaultData();
+    var base = defaultData();
+    if (Array.isArray(raw.roster) && raw.roster.length) {
+      var roster = [];
+      for (var i = 0; i < raw.roster.length; i++) {
+        var r = raw.roster[i];
+        if (r && typeof r.id === "string" && typeof r.name === "string") {
+          roster.push({ id: r.id, name: r.name, number: typeof r.number === "string" ? r.number : "" });
+        }
+      }
+      if (roster.length) base.roster = roster;
+    }
+    base.seasons = [];
+    if (Array.isArray(raw.seasons)) {
+      raw.seasons.forEach(function (s) {
+        if (typeof s === "string" && s && base.seasons.indexOf(s) === -1) base.seasons.push(s);
+      });
+    }
+    base.games = [];
+    if (Array.isArray(raw.games)) {
+      raw.games.forEach(function (g) {
+        var ng = normalizeGame(g);
+        if (ng) {
+          base.games.push(ng);
+          if (base.seasons.indexOf(ng.season) === -1) base.seasons.push(ng.season);
+        }
+      });
+    }
+    base.highlights = [];
+    if (Array.isArray(raw.highlights)) {
+      raw.highlights.forEach(function (h) {
+        var nh = normalizeHighlight(h);
+        if (nh) base.highlights.push(nh);
+      });
+    }
+    if (raw.current) {
+      var cur = normalizeGame(Object.assign({ id: raw.current.id || "draft" }, raw.current));
+      if (cur) {
+        cur.id = raw.current.id || null;
+        base.current = cur;
+        if (cur.season && base.seasons.indexOf(cur.season) === -1) base.seasons.push(cur.season);
+      }
+    } else {
+      base.current = freshGame(base.roster, seasonIdFromDate());
+    }
+    if (raw.live) {
+      var live = normalizeGame(Object.assign({ id: "draft" }, raw.live));
+      if (live) {
+        live.id = null;
+        base.live = live;
+      }
+    }
+    var defSeason = seasonIdFromDate();
+    if (base.seasons.indexOf(defSeason) === -1) base.seasons.push(defSeason);
+    base.seasons.sort();
+    return base;
+  }
+
+  function loadData() {
+    try {
+      var raw = localStorage.getItem(STORAGE_KEY);
+      if (!raw) return defaultData();
+      return normalizeData(JSON.parse(raw));
+    } catch (e) {
+      return defaultData();
+    }
+  }
+
+  function saveData() {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      showBanner("Couldn't save on this device. Storage may be full or blocked.", "warn");
+    }
+  }
+
+  function esc(s) {
+    return String(s == null ? "" : s)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
+  function formatDate(iso) {
+    if (!iso || !/^\d{4}-\d{2}-\d{2}$/.test(iso)) return iso || "";
+    var dt = new Date(+iso.slice(0, 4), +iso.slice(5, 7) - 1, +iso.slice(8, 10));
+    return dt.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+  }
+
+  function youtubeId(url) {
+    var match = String(url).match(/(?:youtube\.com\/(?:watch\?[^#\s]*v=|embed\/|shorts\/|live\/)|youtu\.be\/)([A-Za-z0-9_-]{6,})/i);
+    return match ? match[1] : null;
+  }
+
+  function driveId(url) {
+    var file = String(url).match(/drive\.google\.com\/file\/d\/([A-Za-z0-9_-]+)/i);
+    if (file) return file[1];
+    var open = String(url).match(/drive\.google\.com\/open\?[^\s]*id=([A-Za-z0-9_-]+)/i);
+    return open ? open[1] : null;
+  }
+
+  function highlightEmbed(url) {
+    var href = String(url).trim();
+    var yt = youtubeId(href);
+    if (yt) return { embed: "https://www.youtube-nocookie.com/embed/" + yt, href: href };
+    var drive = driveId(href);
+    if (drive) return { embed: "https://drive.google.com/file/d/" + drive + "/preview", href: href };
+    if (/hudl\.com\/embed/i.test(href)) return { embed: href, href: href };
+    return { embed: null, href: href };
+  }
+
+  function safeHttpUrl(url) {
+    try {
+      var u = new URL(url, window.location.href);
+      if (u.protocol === "http:" || u.protocol === "https:") return u.href;
+    } catch (e) {}
+    return null;
+  }
+
+  function eventToCourt(e, svg) {
+    var rect = svg.getBoundingClientRect();
+    if (rect.width <= 0 || rect.height <= 0) return null;
+    var scale = Math.min(rect.width / COURT_W, rect.height / COURT_H);
+    var ox = (rect.width - COURT_W * scale) / 2;
+    var oy = (rect.height - COURT_H * scale) / 2;
+    var x = (e.clientX - rect.left - ox) / scale;
+    var y = (e.clientY - rect.top - oy) / scale;
+    if (x < 0 || x > COURT_W || y < 0 || y > COURT_H) return null;
+    return { x: x, y: y };
+  }
+
+  function courtSvg(shots, pending, interactive) {
+    var marks = shots.map(function (shot) {
+      if (shot.made) {
+        return '<circle cx="' + shot.x + '" cy="' + shot.y + '" r="0.95" fill="var(--make)"/>';
+      }
+      return '<g stroke="var(--miss)" stroke-width="0.38" stroke-linecap="round">' +
+        '<line x1="' + (shot.x - 0.85) + '" y1="' + (shot.y - 0.85) + '" x2="' + (shot.x + 0.85) + '" y2="' + (shot.y + 0.85) + '"/>' +
+        '<line x1="' + (shot.x + 0.85) + '" y1="' + (shot.y - 0.85) + '" x2="' + (shot.x - 0.85) + '" y2="' + (shot.y + 0.85) + '"/>' +
+        "</g>";
+    }).join("");
+    var pend = pending
+      ? '<circle cx="' + pending.x + '" cy="' + pending.y + '" r="1.05" fill="none" stroke="var(--accent)" stroke-width="0.4"/>'
+      : "";
+    return (
+      '<svg class="court" viewBox="0 0 ' + COURT_W + " " + COURT_H + '" width="100%" role="img" ' +
+      'aria-label="Half-court shot chart' + (interactive ? ". Tap to mark a shot." : "") + '" ' +
+      (interactive ? 'data-court="1"' : "") + ">" +
+      '<rect x="0" y="0" width="' + COURT_W + '" height="' + COURT_H + '" fill="var(--court)" stroke="var(--court-line)" stroke-width="0.35"/>' +
+      '<rect x="19" y="0" width="12" height="19" fill="none" stroke="var(--court-line)" stroke-width="0.25"/>' +
+      '<path d="M 19 19 A 6 6 0 0 0 31 19" fill="none" stroke="var(--court-line)" stroke-width="0.25"/>' +
+      '<path d="M 19 19 A 6 6 0 0 1 31 19" fill="none" stroke="var(--court-line)" stroke-width="0.2" stroke-dasharray="1 0.8"/>' +
+      '<line x1="22" y1="4" x2="28" y2="4" stroke="var(--court-line)" stroke-width="0.45"/>' +
+      '<circle cx="' + HOOP_X + '" cy="' + HOOP_Y + '" r="0.75" fill="none" stroke="var(--court-line)" stroke-width="0.28"/>' +
+      '<path d="M 21 5.25 A 4 4 0 0 1 29 5.25" fill="none" stroke="var(--court-line)" stroke-width="0.2"/>' +
+      '<path d="M ' + (25 - THREE_DX) + " 0 A " + THREE_R + " " + THREE_R + " 0 1 0 " + (25 + THREE_DX) + ' 0" fill="none" stroke="var(--court-line)" stroke-width="0.28"/>' +
+      '<path d="M 19 42 A 6 6 0 0 0 31 42" fill="none" stroke="var(--court-line)" stroke-width="0.25"/>' +
+      marks + pend +
+      "</svg>"
+    );
+  }
+
+  function stepperHtml(playerId, key, value, minusDisabled) {
+    return (
+      '<div class="stepper">' +
+        '<div class="lab">' + LABELS[key] + "</div>" +
+        '<div class="row">' +
+          '<button type="button" class="btn pm" data-act="bump" data-pid="' + esc(playerId) + '" data-key="' + key + '" data-delta="-1"' +
+            (minusDisabled ? " disabled" : "") + ' aria-label="Decrease ' + LABELS[key] + '">−</button>' +
+          '<div class="val">' + esc(value) + "</div>" +
+          '<button type="button" class="btn pm" data-act="bump" data-pid="' + esc(playerId) + '" data-key="' + key + '" data-delta="1" aria-label="Increase ' + LABELS[key] + '">+</button>' +
+        "</div>" +
+      "</div>"
+    );
+  }
+
+  function playerBoardHtml(player) {
+    var s = player.stats;
+    var shots = [
+      ["make2", "+2", "primary"],
+      ["make3", "+3", "primary"],
+      ["make1", "+1", "primary"],
+      ["miss2", "Miss 2", ""],
+      ["miss3", "Miss 3", ""],
+      ["miss1", "Miss 1", ""]
+    ].map(function (row) {
+      return '<button type="button" class="btn ' + row[2] + '" data-act="shortcut" data-pid="' + esc(player.id) + '" data-kind="' + row[0] + '">' + row[1] + "</button>";
+    }).join("");
+    var simple = SIMPLE_STATS.map(function (key) {
+      return stepperHtml(player.id, key, s[key], s[key] <= 0);
+    }).join("");
+    var shooting = SHOOTING_PAIRS.map(function (pair) {
+      var made = pair[0], att = pair[1];
+      return stepperHtml(player.id, made, s[made], s[made] <= 0) +
+        stepperHtml(player.id, att, s[att], s[att] <= s[made]);
+    }).join("");
+    return (
+      '<div class="caption">Score</div>' +
+      '<div class="shortcuts">' + shots + "</div>" +
+      '<div class="grid-stats">' + simple + "</div>" +
+      '<div class="caption" style="margin-top:1rem">Shooting</div>' +
+      '<div class="grid-stats">' + shooting + "</div>" +
+      '<div class="pcts"><span>FG <strong>' + pct(s.fgm, s.fga) + "</strong></span>" +
+      "<span>3P <strong>" + pct(s.tpm, s.tpa) + "</strong></span>" +
+      "<span>FT <strong>" + pct(s.ftm, s.fta) + "</strong></span></div>"
+    );
+  }
+
+  function shotChartHtml(player, allShots, pending) {
+    var filter = ui.shotFilter[player.id] || "this";
+    var visible = filter === "all" ? allShots : allShots.filter(function (sh) { return sh.playerId === player.id; });
+    var canUndo = allShots.some(function (sh) { return sh.playerId === player.id; });
+    var pend = pending && pending.playerId === player.id ? pending : null;
+    var hint;
+    if (pend) {
+      hint = '<div class="hint" style="margin-top:8px">' + (pend.isThree ? "3-point shot — make or miss?" : "2-point shot — make or miss?") + "</div>" +
+        '<div class="actions">' +
+          '<button type="button" class="btn primary" data-act="pending-make" data-pid="' + esc(player.id) + '">Make</button>' +
+          '<button type="button" class="btn" data-act="pending-miss" data-pid="' + esc(player.id) + '">Miss</button>' +
+          '<button type="button" class="btn" data-act="pending-cancel" data-pid="' + esc(player.id) + '">Cancel</button>' +
+        "</div>";
+    } else {
+      hint = '<p class="hint" style="margin-top:8px;margin-bottom:0">Tap the court to mark a shot. The arc is a high-school 3-point line.</p>';
+    }
+    return (
+      '<div class="caption" style="margin-top:1rem">Shot chart</div>' +
+      '<div class="chart-tools">' +
+        '<button type="button" class="btn ' + (filter === "this" ? "primary" : "") + '" data-act="filter" data-pid="' + esc(player.id) + '" data-filter="this">This player</button>' +
+        '<button type="button" class="btn ' + (filter === "all" ? "primary" : "") + '" data-act="filter" data-pid="' + esc(player.id) + '" data-filter="all">All players</button>' +
+        '<button type="button" class="btn" data-act="undo" data-pid="' + esc(player.id) + '"' + (canUndo ? "" : " disabled") + ">Undo last shot</button>" +
+      "</div>" +
+      courtSvg(visible, pend, true).replace("<svg ", '<svg data-pid="' + esc(player.id) + '" ') +
+      hint
+    );
+  }
+
+  function seasonOptions(selected) {
+    var set = {};
+    (data.seasons || []).forEach(function (s) { set[s] = true; });
+    data.games.forEach(function (g) { if (g.season) set[g.season] = true; });
+    if (data.current && data.current.season) set[data.current.season] = true;
+    set[seasonIdFromDate()] = true;
+    if (selected) set[selected] = true;
+    return Object.keys(set).sort().reverse();
+  }
+
+  function optionList(values, selected) {
+    return values.map(function (v) {
+      return '<option value="' + esc(v) + '"' + (v === selected ? " selected" : "") + ">" + esc(v) + "</option>";
+    }).join("");
+  }
+
+  function renderGame() {
+    var g = data.current;
+    var editing = !!(g && g.id);
+    var seasons = seasonOptions(g.season);
+    var html = "";
+    if (editing) {
+      html += '<div class="edit-banner"><span>Editing ' + esc(formatDate(g.date)) +
+        (g.opponent ? " vs " + esc(g.opponent) : "") +
+        '.</span><button type="button" class="btn small" data-act="done-edit">Done</button></div>';
+    }
+    html += '<div class="panel"><h2>Game</h2>' +
+      '<div class="fields">' +
+        '<label class="field"><span>Date</span><input type="date" id="gameDate" value="' + esc(g.date) + '"></label>' +
+        '<label class="field"><span>Opponent</span><input type="text" id="gameOpp" value="' + esc(g.opponent) + '" placeholder="Opponent"></label>' +
+        '<label class="field"><span>Season</span><select id="gameSeason">' + optionList(seasons, g.season) + "</select></label>" +
+      "</div>" +
+      '<div class="actions">' +
+        (editing
+          ? '<button type="button" class="btn primary" data-act="save-changes">Save changes</button>' +
+            '<button type="button" class="btn" data-act="save-end">Save / End Game</button>'
+          : '<button type="button" class="btn primary" data-act="save-end">Save / End Game</button>') +
+        '<button type="button" class="btn" data-act="new-game">' + (ui.confirmNew ? "Tap again to start new" : "New game") + "</button>" +
+        (ui.confirmNew ? '<button type="button" class="btn" data-act="cancel-new">Cancel</button>' : "") +
+        '<button type="button" class="btn danger' + (ui.confirmReset ? " armed" : "") + '" data-act="reset">' +
+          (ui.confirmReset ? "Tap again to reset" : "Reset game") + "</button>" +
+        (ui.confirmReset ? '<button type="button" class="btn" data-act="cancel-reset">Cancel</button>' : "") +
+      "</div></div>";
+
+    g.players.forEach(function (player) {
+      html += '<div class="panel" data-player="' + esc(player.id) + '">' +
+        '<div class="panel-head"><h2>' +
+          (jerseyNumber(player.number) ? '<span class="num">#' + esc(jerseyNumber(player.number)) + "</span>" : "") +
+          esc(player.name) + "</h2>" +
+          '<button type="button" class="btn small danger" data-act="remove-player" data-pid="' + esc(player.id) + '">Remove</button>' +
+        "</div>" +
+        '<div class="fields" style="margin-bottom:12px">' +
+          '<label class="field"><span>Jersey number</span>' +
+          '<input type="text" inputmode="numeric" data-act="jersey" data-pid="' + esc(player.id) + '" value="' + esc(player.number) + '" placeholder="12">' +
+          "</label></div>" +
+        playerBoardHtml(player) +
+        shotChartHtml(player, g.shots, ui.pending) +
+      "</div>";
+    });
+
+    html += '<div class="panel"><h2>Add a player</h2>' +
+      '<div class="fields">' +
+        '<label class="field"><span>Player name</span><input type="text" id="newName" value="' + esc(ui.newName) + '" placeholder="Name"></label>' +
+        '<label class="field"><span>Jersey number</span><input type="text" inputmode="numeric" id="newNumber" value="' + esc(ui.newNumber) + '" placeholder="12"></label>' +
+      "</div>" +
+      '<div class="actions"><button type="button" class="btn primary" data-act="add-player" ' +
+        (ui.newName.trim() ? "" : "disabled") + ">Add player</button></div></div>";
+    return html;
+  }
+
+  function gameSummaryLine(game) {
+    return game.players.map(function (p) {
+      return playerLabel(p) + " " + p.stats.pts + " pts";
+    }).join(" · ");
+  }
+
+  function renderGames() {
+    var seasons = seasonOptions(ui.gamesSeason);
+    if (!ui.gamesSeason) ui.gamesSeason = "all";
+    var list = data.games.slice().sort(function (a, b) {
+      if (a.date === b.date) return (b.savedAt || "").localeCompare(a.savedAt || "");
+      return b.date.localeCompare(a.date);
+    });
+    if (ui.gamesSeason && ui.gamesSeason !== "all") {
+      list = list.filter(function (g) { return g.season === ui.gamesSeason; });
+    }
+    var html = '<div class="panel"><div class="panel-head"><h2>Games</h2></div>' +
+      '<div class="fields"><label class="field"><span>Season</span>' +
+      '<select id="gamesSeason">' +
+        '<option value="all"' + (ui.gamesSeason === "all" ? " selected" : "") + ">All seasons</option>" +
+        optionList(seasons, ui.gamesSeason) +
+      "</select></label></div>";
+    if (!list.length) {
+      html += '<p class="empty">No saved games yet. Track a game, then tap Save / End Game.</p></div>';
+      return html;
+    }
+    html += list.map(function (g) {
+      var armed = ui.pendingDeleteId === g.id;
+      return '<div class="game-card">' +
+        '<button type="button" class="game-main" data-act="open-game" data-gid="' + esc(g.id) + '">' +
+          '<div class="g-date">' + esc(formatDate(g.date)) + (g.season ? " · " + esc(g.season) : "") + "</div>" +
+          '<div class="g-opp">' + (g.opponent ? "vs " + esc(g.opponent) : "No opponent listed") + "</div>" +
+          '<div class="g-line">' + esc(gameSummaryLine(g)) + "</div>" +
+        "</button>" +
+        '<button type="button" class="btn small danger' + (armed ? " armed" : "") + '" data-act="delete-game" data-gid="' + esc(g.id) + '">' +
+          (armed ? "Tap again to delete" : "Delete") + "</button>" +
+        (armed ? '<button type="button" class="btn small" data-act="cancel-delete">Cancel</button>' : "") +
+      "</div>";
+    }).join("") + "</div>";
+    return html;
+  }
+
+  function findRosterMeta(id, fallback) {
+    var r = data.roster.find(function (p) { return p.id === id; });
+    if (r) return r;
+    return fallback || { id: id, name: "Player", number: "" };
+  }
+
+  function seasonTotals(seasonId) {
+    var games = data.games.filter(function (g) { return g.season === seasonId; });
+    var byId = {};
+    var shots = [];
+    games.forEach(function (g) {
+      g.players.forEach(function (p) {
+        if (!byId[p.id]) {
+          var meta = findRosterMeta(p.id, p);
+          byId[p.id] = {
+            id: p.id,
+            name: meta.name || p.name,
+            number: meta.number || p.number,
+            gp: 0,
+            stats: emptyStats()
+          };
+        }
+        var row = byId[p.id];
+        row.gp += 1;
+        ALL_KEYS.forEach(function (k) { row.stats[k] += p.stats[k] || 0; });
+        if (p.number) row.number = p.number;
+        if (p.name) row.name = p.name;
+      });
+      (g.shots || []).forEach(function (s) { shots.push(s); });
+    });
+    var rows = Object.keys(byId).map(function (id) { return byId[id]; });
+    rows.sort(function (a, b) { return b.stats.pts - a.stats.pts || a.name.localeCompare(b.name); });
+    return { games: games.length, rows: rows, shots: shots };
+  }
+
+  function renderSeason() {
+    var seasons = seasonOptions(ui.seasonId);
+    if (!ui.seasonId) ui.seasonId = seasonIdFromDate();
+    if (seasons.indexOf(ui.seasonId) === -1 && seasons.length) ui.seasonId = seasons[0];
+    var tot = seasonTotals(ui.seasonId);
+    var mode = ui.seasonMode || "totals";
+    var html = '<div class="panel"><div class="panel-head"><h2>Season</h2></div>' +
+      '<div class="fields">' +
+        '<label class="field"><span>Season</span><select id="seasonSel">' + optionList(seasons, ui.seasonId) + "</select></label>" +
+      "</div>" +
+      '<div class="actions">' +
+        '<button type="button" class="btn small" data-act="add-season">Add season</button>' +
+      "</div>" +
+      '<p class="hint">' + tot.games + " saved game" + (tot.games === 1 ? "" : "s") + " in " + esc(ui.seasonId) + ".</p>" +
+      '<div class="seg">' +
+        '<button type="button" class="btn ' + (mode === "totals" ? "primary" : "") + '" data-act="season-mode" data-mode="totals">Totals</button>' +
+        '<button type="button" class="btn ' + (mode === "averages" ? "primary" : "") + '" data-act="season-mode" data-mode="averages">Per-game averages</button>' +
+      "</div>";
+    if (!tot.rows.length) {
+      html += '<p class="empty">Save a game to see season totals and a combined shot chart.</p></div>';
+      return html;
+    }
+    html += '<div class="table-wrap"><table class="stats"><thead><tr>' +
+      "<th>Player</th><th>GP</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>MIN</th>" +
+      "<th>FGM-A</th><th>FG%</th><th>3PM-A</th><th>3P%</th><th>FTM-A</th><th>FT%</th>" +
+      "</tr></thead><tbody>";
+    tot.rows.forEach(function (row) {
+      var s = row.stats;
+      var gp = row.gp;
+      var num = function (k, d) { return mode === "averages" ? avg(s[k], gp, d) : String(s[k]); };
+      var pair = function (m, a) { return mode === "averages" ? avg(s[m], gp) + "-" + avg(s[a], gp) : (s[m] + "-" + s[a]); };
+      html += "<tr><td>" + esc(playerLabel(row)) + "</td><td>" + gp + "</td>" +
+        "<td>" + num("pts", 1) + "</td><td>" + num("reb", 1) + "</td><td>" + num("ast", 1) + "</td>" +
+        "<td>" + num("stl", 1) + "</td><td>" + num("blk", 1) + "</td><td>" + num("to", 1) + "</td>" +
+        "<td>" + num("min", 1) + "</td>" +
+        "<td>" + pair("fgm", "fga") + "</td><td>" + pct(s.fgm, s.fga) + "</td>" +
+        "<td>" + pair("tpm", "tpa") + "</td><td>" + pct(s.tpm, s.tpa) + "</td>" +
+        "<td>" + pair("ftm", "fta") + "</td><td>" + pct(s.ftm, s.fta) + "</td></tr>";
+    });
+    html += "</tbody></table></div></div>";
+
+    var chartPlayer = ui.seasonChartPlayer || "all";
+    var chartShots = chartPlayer === "all" ? tot.shots : tot.shots.filter(function (s) { return s.playerId === chartPlayer; });
+    html += '<div class="panel"><h2>Season shot chart</h2>' +
+      '<p class="hint">Every saved shot in ' + esc(ui.seasonId) + ". This chart is view-only.</p>" +
+      '<div class="chart-tools">' +
+        '<button type="button" class="btn ' + (chartPlayer === "all" ? "primary" : "") + '" data-act="season-chart" data-pid="all">All players</button>' +
+        tot.rows.map(function (row) {
+          return '<button type="button" class="btn ' + (chartPlayer === row.id ? "primary" : "") + '" data-act="season-chart" data-pid="' + esc(row.id) + '">' +
+            esc(playerLabel(row)) + "</button>";
+        }).join("") +
+      "</div>" +
+      courtSvg(chartShots, null, false) +
+      "</div>";
+    return html;
+  }
+
+  function highlightPlayerName(playerId) {
+    if (playerId === "team") return "Team";
+    var p = data.current.players.find(function (x) { return x.id === playerId; }) ||
+      data.roster.find(function (x) { return x.id === playerId; });
+    if (p) return playerLabel(p);
+    for (var i = 0; i < data.games.length; i++) {
+      var gp = data.games[i].players.find(function (x) { return x.id === playerId; });
+      if (gp) return playerLabel(gp);
+    }
+    return "Player";
+  }
+
+  function renderHighlights() {
+    var opts = [{ id: "team", name: "Team", number: "" }].concat(data.roster);
+    data.current.players.forEach(function (p) {
+      if (!opts.some(function (o) { return o.id === p.id; })) opts.push(p);
+    });
+    var html = '<div class="panel"><h2>Highlights</h2>' +
+      '<p class="hint">Save YouTube, Google Drive, or Hudl links with a title, player, and date. They stay on this phone (and in Export). You can also play a clip from this device — that file is not saved and goes away when you refresh.</p>' +
+      '<div class="caption">Play a video from this phone</div>' +
+      '<input type="file" id="localVideo" accept="video/*">' +
+      (ui.localVideo
+        ? '<div class="local-video"><p class="hint">' + esc(ui.localVideo.name) + " — playing on this device only, not saved.</p>" +
+          '<video src="' + esc(ui.localVideo.url) + '" controls playsinline></video></div>'
+        : "") +
+      '<div class="caption" style="margin-top:1rem">Save a link</div>' +
+      '<div class="fields">' +
+        '<label class="field"><span>Title</span><input type="text" id="hlTitle" value="' + esc(ui.hlTitle) + '" placeholder="Game-winner"></label>' +
+        '<label class="field"><span>Player</span><select id="hlPlayer">' +
+          opts.map(function (p) {
+            var val = p.id;
+            var lab = p.id === "team" ? "Team" : playerLabel(p);
+            return '<option value="' + esc(val) + '"' + (ui.hlPlayer === val ? " selected" : "") + ">" + esc(lab) + "</option>";
+          }).join("") +
+        "</select></label>" +
+        '<label class="field"><span>Date</span><input type="date" id="hlDate" value="' + esc(ui.hlDate) + '"></label>' +
+        '<label class="field wide"><span>Video link</span><input type="url" id="hlUrl" value="' + esc(ui.hlUrl) + '" placeholder="https://"></label>' +
+      "</div>" +
+      '<div class="actions"><button type="button" class="btn primary" data-act="add-highlight"' +
+        (ui.hlUrl.trim() ? "" : " disabled") + ">Save link</button></div>";
+
+    if (!data.highlights.length) {
+      html += '<p class="empty">No saved highlight links yet.</p></div>';
+      return html;
+    }
+    var items = data.highlights.slice().reverse().map(function (item) {
+      var view = highlightEmbed(item.url);
+      var href = safeHttpUrl(view.href);
+      var embed = view.embed && safeHttpUrl(view.embed);
+      var block = '<div class="hl-item">' +
+        '<div class="hl-meta">' + esc(item.title) + " · " + esc(highlightPlayerName(item.playerId)) + " · " + esc(item.date) + "</div>";
+      if (href) {
+        block += '<a href="' + esc(href) + '" target="_blank" rel="noopener noreferrer">' + esc(item.title ? item.title + ": " + view.href : view.href) + "</a>";
+      } else {
+        block += '<div class="muted">' + esc(view.href) + "</div>";
+      }
+      if (embed) {
+        block += '<iframe src="' + esc(embed) + '" title="' + esc(item.title || "Highlight") + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
+      }
+      block += '<div class="actions"><button type="button" class="btn small danger" data-act="remove-highlight" data-hid="' + esc(item.id) + '">Remove</button></div></div>';
+      return block;
+    }).join("");
+    html += items + "</div>";
+    return html;
+  }
+
+  function setTab(tab) {
+    ui.tab = tab;
+    ui.confirmReset = false;
+    ui.confirmNew = false;
+    ui.pendingDeleteId = null;
+    render();
+  }
+
+  function render() {
+    var main = document.getElementById("main");
+    var html = "";
+    if (ui.tab === "games") html = renderGames();
+    else if (ui.tab === "season") html = renderSeason();
+    else if (ui.tab === "highlights") html = renderHighlights();
+    else html = renderGame();
+    main.innerHTML = html;
+    document.querySelectorAll(".tab").forEach(function (btn) {
+      btn.classList.toggle("active", btn.getAttribute("data-tab") === ui.tab);
+    });
+    var tip = document.getElementById("installTip");
+    if (tip) tip.classList.toggle("show", !!ui.showHint);
+    bindDynamic();
+  }
+
+  function bindField(id, setter) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.addEventListener("input", function () { setter(el.value); });
+    el.addEventListener("change", function () { setter(el.value); });
+  }
+
+  function bindDynamic() {
+    bindField("gameDate", function (v) {
+      data.current.date = v;
+      if (v && !data.current.id) data.current.season = seasonIdFromDate(v);
+      var sel = document.getElementById("gameSeason");
+      if (sel && !data.current.id) sel.value = data.current.season;
+      saveData();
+      ui.confirmReset = false;
+    });
+    bindField("gameOpp", function (v) { data.current.opponent = v; saveData(); ui.confirmReset = false; });
+    bindField("gameSeason", function (v) { data.current.season = v; saveData(); });
+    bindField("newName", function (v) {
+      ui.newName = v;
+      var btn = document.querySelector('[data-act="add-player"]');
+      if (btn) btn.disabled = !v.trim();
+    });
+    bindField("newNumber", function (v) { ui.newNumber = v; });
+    bindField("gamesSeason", function (v) { ui.gamesSeason = v; render(); });
+    bindField("seasonSel", function (v) { ui.seasonId = v; render(); });
+    bindField("hlTitle", function (v) { ui.hlTitle = v; });
+    bindField("hlPlayer", function (v) { ui.hlPlayer = v; });
+    bindField("hlDate", function (v) { ui.hlDate = v; });
+    bindField("hlUrl", function (v) {
+      ui.hlUrl = v;
+      var btn = document.querySelector('[data-act="add-highlight"]');
+      if (btn) btn.disabled = !v.trim();
+    });
+    document.querySelectorAll('input[data-act="jersey"]').forEach(function (el) {
+      el.addEventListener("input", function () {
+        updateNumber(el.getAttribute("data-pid"), el.value);
+      });
+      el.addEventListener("change", function () {
+        updateNumber(el.getAttribute("data-pid"), el.value);
+        render();
+      });
+    });
+    var lv = document.getElementById("localVideo");
+    if (lv) {
+      lv.addEventListener("change", function () {
+        if (ui.localVideo) URL.revokeObjectURL(ui.localVideo.url);
+        var file = lv.files && lv.files[0];
+        ui.localVideo = file ? { name: file.name, url: URL.createObjectURL(file) } : null;
+        render();
+      });
+    }
+    document.querySelectorAll("svg[data-court]").forEach(function (svg) {
+      svg.addEventListener("pointerdown", function (e) {
+        var point = eventToCourt(e, svg);
+        if (!point) return;
+        e.preventDefault();
+        ui.pending = {
+          playerId: svg.getAttribute("data-pid"),
+          x: point.x,
+          y: point.y,
+          isThree: isThreePoint(point.x, point.y)
+        };
+        render();
+      });
+    });
+  }
+
+  function updateNumber(id, number) {
+    data.current.players.forEach(function (p) {
+      if (p.id === id) p.number = number;
+    });
+    data.roster.forEach(function (p) {
+      if (p.id === id) p.number = jerseyNumber(number);
+    });
+    saveData();
+  }
+
+  function updateRosterFromGame(game) {
+    game.players.forEach(function (p) {
+      var existing = data.roster.find(function (r) { return r.id === p.id; });
+      if (existing) {
+        existing.name = p.name;
+        existing.number = jerseyNumber(p.number);
+      } else {
+        data.roster.push({ id: p.id, name: p.name, number: jerseyNumber(p.number) });
+      }
+    });
+  }
+
+  function snapshotGame(game, keepId) {
+    var snap = clone(game);
+    snap.id = keepId || game.id || newId();
+    snap.savedAt = new Date().toISOString();
+    if (data.seasons.indexOf(snap.season) === -1) data.seasons.push(snap.season);
+    return snap;
+  }
+
+  function upsertGame(snap) {
+    var idx = data.games.findIndex(function (g) { return g.id === snap.id; });
+    if (idx >= 0) data.games[idx] = snap;
+    else data.games.push(snap);
+  }
+
+  function gameIsEmpty(game) {
+    if (game.opponent && game.opponent.trim()) return false;
+    if (game.shots && game.shots.length) return false;
+    return game.players.every(function (p) {
+      return ALL_KEYS.every(function (k) { return !p.stats[k]; });
+    });
+  }
+
+  function saveEndGame(thenNew) {
+    var g = data.current;
+    if (gameIsEmpty(g) && !g.id) {
+      showBanner("Add an opponent or some stats before saving.", "warn");
+      return;
+    }
+    updateRosterFromGame(g);
+    var snap = snapshotGame(g, g.id);
+    upsertGame(snap);
+    saveData();
+    if (thenNew) {
+      data.live = null;
+      data.current = freshGame(data.roster, snap.season);
+      ui.pending = null;
+      saveData();
+      showBanner("Game saved. Ready for the next one.", "ok");
+      ui.tab = "game";
+    } else {
+      data.current = clone(snap);
+      showBanner("Changes saved.", "ok");
+    }
+    ui.confirmReset = false;
+    ui.confirmNew = false;
+    render();
+  }
+
+  function currentDirty() {
+    var g = data.current;
+    if (!g) return false;
+    if (g.id) {
+      var saved = data.games.find(function (x) { return x.id === g.id; });
+      if (!saved) return !gameIsEmpty(g);
+      var a = clone(g); delete a.savedAt;
+      var b = clone(saved); delete b.savedAt;
+      return JSON.stringify(a) !== JSON.stringify(b);
+    }
+    return !gameIsEmpty(g);
+  }
+
+  function startNewGame(force) {
+    if (!force && currentDirty()) {
+      ui.confirmNew = true;
+      render();
+      return;
+    }
+    updateRosterFromGame(data.current);
+    data.live = null;
+    data.current = freshGame(data.roster, data.current.season || seasonIdFromDate());
+    ui.pending = null;
+    ui.confirmNew = false;
+    ui.confirmReset = false;
+    saveData();
+    render();
+  }
+
+  function resetGame() {
+    if (!ui.confirmReset) {
+      ui.confirmReset = true;
+      render();
+      return;
+    }
+    data.current.shots = [];
+    data.current.players = data.current.players.map(function (p) {
+      return { id: p.id, name: p.name, number: p.number, stats: emptyStats() };
+    });
+    ui.pending = null;
+    ui.confirmReset = false;
+    saveData();
+    render();
+  }
+
+  function addPlayer() {
+    var name = (ui.newName || "").trim();
+    if (!name) return;
+    var number = jerseyNumber(ui.newNumber);
+    var existing = data.roster.find(function (r) { return r.name.toLowerCase() === name.toLowerCase(); });
+    var id = existing ? existing.id : newId();
+    if (data.current.players.some(function (p) { return p.id === id || p.name.toLowerCase() === name.toLowerCase(); })) {
+      showBanner(name + " is already in this game.", "warn");
+      return;
+    }
+    if (!existing) data.roster.push({ id: id, name: name, number: number });
+    else if (number) existing.number = number;
+    data.current.players.push({
+      id: id,
+      name: existing ? existing.name : name,
+      number: number || (existing ? existing.number : ""),
+      stats: emptyStats()
+    });
+    ui.newName = "";
+    ui.newNumber = "";
+    saveData();
+    render();
+  }
+
+  function removePlayer(id) {
+    data.current.players = data.current.players.filter(function (p) { return p.id !== id; });
+    data.current.shots = data.current.shots.filter(function (s) { return s.playerId !== id; });
+    if (ui.pending && ui.pending.playerId === id) ui.pending = null;
+    saveData();
+    render();
+  }
+
+  function bump(pid, key, delta) {
+    data.current.players.forEach(function (p) {
+      if (p.id === pid) p.stats = clampBump(p.stats, key, delta);
+    });
+    ui.confirmReset = false;
+    saveData();
+    render();
+  }
+
+  function shortcut(pid, kind) {
+    data.current.players.forEach(function (p) {
+      if (p.id === pid) p.stats = applyShot(p.stats, kind);
+    });
+    ui.confirmReset = false;
+    saveData();
+    render();
+  }
+
+  function markPending(made) {
+    var pend = ui.pending;
+    if (!pend) return;
+    var kind = shotKind(made, pend.isThree);
+    data.current.shots.push({
+      id: newId(),
+      playerId: pend.playerId,
+      x: pend.x,
+      y: pend.y,
+      made: made,
+      isThree: pend.isThree
+    });
+    data.current.players.forEach(function (p) {
+      if (p.id === pend.playerId) p.stats = applyShot(p.stats, kind);
+    });
+    ui.pending = null;
+    saveData();
+    render();
+  }
+
+  function undoLastShot(playerId) {
+    var shots = data.current.shots;
+    var last = -1;
+    for (var i = shots.length - 1; i >= 0; i--) {
+      if (shots[i].playerId === playerId) { last = i; break; }
+    }
+    if (last < 0) return;
+    var shot = shots[last];
+    var kind = shotKind(shot.made, shot.isThree);
+    data.current.shots = shots.filter(function (_, idx) { return idx !== last; });
+    data.current.players.forEach(function (p) {
+      if (p.id === playerId) p.stats = revertShot(p.stats, kind);
+    });
+    saveData();
+    render();
+  }
+
+  function stashLive() {
+    if (data.current && !data.current.id) {
+      data.live = clone(data.current);
+    }
+  }
+
+  function resumeLiveOrFresh(season) {
+    if (data.live) {
+      data.current = data.live;
+      data.live = null;
+    } else {
+      data.current = freshGame(data.roster, season || seasonIdFromDate());
+    }
+    ui.pending = null;
+  }
+
+  function openGame(id) {
+    var g = data.games.find(function (x) { return x.id === id; });
+    if (!g) return;
+    if (data.current && data.current.id === id) {
+      ui.tab = "game";
+      ui.pendingDeleteId = null;
+      render();
+      return;
+    }
+    if (currentDirty() && data.current && data.current.id && data.current.id !== id) {
+      if (!window.confirm("You have unsaved changes to the game you're editing. Open this one anyway?")) {
+        return;
+      }
+    }
+    stashLive();
+    data.current = clone(g);
+    ui.pending = null;
+    ui.tab = "game";
+    ui.pendingDeleteId = null;
+    saveData();
+    render();
+  }
+
+  function deleteGame(id) {
+    if (ui.pendingDeleteId !== id) {
+      ui.pendingDeleteId = id;
+      render();
+      return;
+    }
+    data.games = data.games.filter(function (g) { return g.id !== id; });
+    if (data.current && data.current.id === id) {
+      data.current.id = null;
+    }
+    ui.pendingDeleteId = null;
+    saveData();
+    showBanner("Game deleted.", "ok");
+    render();
+  }
+
+  function addHighlight() {
+    var url = (ui.hlUrl || "").trim();
+    if (!url) return;
+    data.highlights.push({
+      id: newId(),
+      title: (ui.hlTitle || "").trim() || "Highlight",
+      playerId: ui.hlPlayer || "team",
+      date: (ui.hlDate || "").trim() || todayInEastern(),
+      url: url
+    });
+    ui.hlTitle = "";
+    ui.hlUrl = "";
+    saveData();
+    render();
+  }
+
+  function csvCell(v) {
+    var s = String(v == null ? "" : v);
+    if (/[",\n\r]/.test(s)) return '"' + s.replace(/"/g, '""') + '"';
+    return s;
+  }
+
+  function gameLogRows() {
+    var rows = [];
+    var games = data.games.slice().sort(function (a, b) { return a.date.localeCompare(b.date); });
+    games.forEach(function (g) {
+      g.players.forEach(function (p) {
+        var s = p.stats;
+        rows.push({
+          date: g.date,
+          season: g.season,
+          opponent: g.opponent,
+          player: p.name,
+          number: jerseyNumber(p.number),
+          pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, to: s.to, min: s.min,
+          fgm: s.fgm, fga: s.fga, tpm: s.tpm, tpa: s.tpa, ftm: s.ftm, fta: s.fta,
+          fg_pct: s.fga ? (s.fgm / s.fga) : "",
+          tp_pct: s.tpa ? (s.tpm / s.tpa) : "",
+          ft_pct: s.fta ? (s.ftm / s.fta) : "",
+          game_id: g.id
+        });
+      });
+    });
+    return rows;
+  }
+
+  function exportCSV() {
+    var cols = ["date","season","opponent","player","number","pts","reb","ast","stl","blk","to","min","fgm","fga","tpm","tpa","ftm","fta","fg_pct","tp_pct","ft_pct","game_id"];
+    var rows = gameLogRows();
+    var lines = [cols.join(",")];
+    rows.forEach(function (r) {
+      lines.push(cols.map(function (c) { return csvCell(r[c]); }).join(","));
+    });
+    download("game-stats-log.csv", "text/csv;charset=utf-8", lines.join("\n"));
+  }
+
+  function exportJSON() {
+    var payload = {
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      roster: data.roster,
+      seasons: data.seasons,
+      games: data.games,
+      highlights: data.highlights
+    };
+    download("game-stats.json", "application/json", JSON.stringify(payload, null, 2));
+  }
+
+  function download(filename, mime, text) {
+    var blob = new Blob([text], { type: mime });
+    var a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(function () {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1000);
+  }
+
+  function mergeImport(incoming) {
+    var src = normalizeData(incoming);
+    var existingIds = {};
+    data.games.forEach(function (g) { existingIds[g.id] = true; });
+    var added = 0, skipped = 0;
+    src.games.forEach(function (g) {
+      if (existingIds[g.id]) { skipped += 1; return; }
+      data.games.push(g);
+      existingIds[g.id] = true;
+      added += 1;
+      if (data.seasons.indexOf(g.season) === -1) data.seasons.push(g.season);
+    });
+    var hlIds = {};
+    data.highlights.forEach(function (h) { hlIds[h.id] = true; });
+    var hlAdded = 0;
+    src.highlights.forEach(function (h) {
+      if (hlIds[h.id]) return;
+      data.highlights.push(h);
+      hlIds[h.id] = true;
+      hlAdded += 1;
+    });
+    src.roster.forEach(function (r) {
+      var ex = data.roster.find(function (x) { return x.id === r.id || x.name.toLowerCase() === r.name.toLowerCase(); });
+      if (!ex) data.roster.push({ id: r.id, name: r.name, number: r.number });
+    });
+    src.seasons.forEach(function (s) {
+      if (data.seasons.indexOf(s) === -1) data.seasons.push(s);
+    });
+    saveData();
+    return { added: added, skipped: skipped, highlights: hlAdded };
+  }
+
+  function handleImport(file) {
+    if (!file) return;
+    var reader = new FileReader();
+    reader.onload = function () {
+      try {
+        var parsed = JSON.parse(String(reader.result));
+        var result = mergeImport(parsed);
+        showBanner(
+          "Imported " + result.added + " new game" + (result.added === 1 ? "" : "s") +
+          (result.skipped ? (", skipped " + result.skipped + " duplicate" + (result.skipped === 1 ? "" : "s")) : "") +
+          (result.highlights ? (", added " + result.highlights + " highlight" + (result.highlights === 1 ? "" : "s")) : "") +
+          ".",
+          "ok"
+        );
+        render();
+      } catch (err) {
+        showBanner("That file couldn't be imported. Use a Game Stats JSON export.", "warn");
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function addSeason() {
+    var next = window.prompt("New season (for example 2027-28):", seasonIdFromDate());
+    if (next == null) return;
+    next = next.trim();
+    if (!/^\d{4}-\d{2}$/.test(next)) {
+      showBanner("Use a season like 2026-27.", "warn");
+      return;
+    }
+    if (data.seasons.indexOf(next) === -1) data.seasons.push(next);
+    ui.seasonId = next;
+    saveData();
+    render();
+  }
+
+  var bannerTimer = null;
+  function showBanner(msg, kind) {
+    var el = document.getElementById("banner");
+    el.textContent = msg;
+    el.classList.toggle("ok", kind === "ok");
+    el.classList.add("show");
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(function () { el.classList.remove("show"); }, 5000);
+  }
+
+  function onClick(e) {
+    var t = e.target.closest("[data-act], .tab, [data-tab]");
+    if (!t) return;
+    if (t.classList.contains("tab") || t.getAttribute("data-tab")) {
+      var tab = t.getAttribute("data-tab");
+      if (tab) setTab(tab);
+      return;
+    }
+    var act = t.getAttribute("data-act");
+    var pid = t.getAttribute("data-pid");
+    if (act === "bump") bump(pid, t.getAttribute("data-key"), +t.getAttribute("data-delta"));
+    else if (act === "shortcut") shortcut(pid, t.getAttribute("data-kind"));
+    else if (act === "filter") { ui.shotFilter[pid] = t.getAttribute("data-filter"); render(); }
+    else if (act === "undo") undoLastShot(pid);
+    else if (act === "pending-make") markPending(true);
+    else if (act === "pending-miss") markPending(false);
+    else if (act === "pending-cancel") { ui.pending = null; render(); }
+    else if (act === "add-player") addPlayer();
+    else if (act === "remove-player") removePlayer(pid);
+    else if (act === "save-end") saveEndGame(true);
+    else if (act === "save-changes") saveEndGame(false);
+    else if (act === "new-game") startNewGame(ui.confirmNew);
+    else if (act === "cancel-new") { ui.confirmNew = false; render(); }
+    else if (act === "reset") resetGame();
+    else if (act === "cancel-reset") { ui.confirmReset = false; render(); }
+    else if (act === "open-game") openGame(t.getAttribute("data-gid"));
+    else if (act === "delete-game") deleteGame(t.getAttribute("data-gid"));
+    else if (act === "cancel-delete") { ui.pendingDeleteId = null; render(); }
+    else if (act === "done-edit") {
+      if (currentDirty() && !window.confirm("Leave without saving changes?")) return;
+      resumeLiveOrFresh(data.current.season);
+      ui.confirmReset = false;
+      ui.confirmNew = false;
+      saveData();
+      render();
+    }
+    else if (act === "season-mode") { ui.seasonMode = t.getAttribute("data-mode"); render(); }
+    else if (act === "season-chart") { ui.seasonChartPlayer = pid; render(); }
+    else if (act === "add-season") addSeason();
+    else if (act === "add-highlight") addHighlight();
+    else if (act === "remove-highlight") {
+      data.highlights = data.highlights.filter(function (h) { return h.id !== t.getAttribute("data-hid"); });
+      saveData();
+      render();
+    }
+    else if (act === "export-json") exportJSON();
+    else if (act === "export-csv") exportCSV();
+    else if (act === "import") document.getElementById("fileImport").click();
+    else if (act === "dismiss-hint") {
+      ui.showHint = false;
+      try { localStorage.setItem(HINT_KEY, "1"); } catch (err) {}
+      render();
+    }
+  }
+
+  var data = loadData();
+  var ui = {
+    tab: "game",
+    confirmReset: false,
+    confirmNew: false,
+    pendingDeleteId: null,
+    pending: null,
+    shotFilter: {},
+    seasonId: data.current.season || seasonIdFromDate(),
+    gamesSeason: "all",
+    seasonMode: "totals",
+    seasonChartPlayer: "all",
+    newName: "",
+    newNumber: "",
+    hlTitle: "",
+    hlPlayer: "team",
+    hlDate: todayInEastern(),
+    hlUrl: "",
+    localVideo: null,
+    showHint: true
+  };
+  try { if (localStorage.getItem(HINT_KEY) === "1") ui.showHint = false; } catch (e) {}
+
+  document.addEventListener("click", onClick);
+  document.getElementById("fileImport").addEventListener("change", function (e) {
+    var file = e.target.files && e.target.files[0];
+    handleImport(file);
+    e.target.value = "";
+  });
+
+  render();
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register(BASE + "sw.js", { scope: BASE }).catch(function () {});
+  }
+
+  // Expose helpers for a syntax/unit check in Node by evaluating without DOM.
+  window.GameStats = {
+    emptyStats: emptyStats,
+    clampBump: clampBump,
+    applyShot: applyShot,
+    revertShot: revertShot,
+    isThreePoint: isThreePoint,
+    shotKind: shotKind,
+    seasonIdFromDate: seasonIdFromDate,
+    normalizeData: normalizeData,
+    mergeImport: mergeImport,
+    pct: pct
+  };
+})();
+
+  </script>
+</body>
+</html>

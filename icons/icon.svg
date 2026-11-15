@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Game Stats">
+  <rect width="512" height="512" rx="112" fill="#1f6f4a"/>
+  <circle cx="256" cy="256" r="168" fill="#e87524" stroke="#2d1c12" stroke-width="14"/>
+  <g fill="none" stroke="#2d1c12" stroke-width="14" stroke-linecap="round">
+    <path d="M256 88 v336"/>
+    <path d="M88 256 h336"/>
+    <path d="M200 104 C 130 170, 130 342, 200 408"/>
+    <path d="M312 104 C 382 170, 382 342, 312 408"/>
+  </g>
+</svg>
