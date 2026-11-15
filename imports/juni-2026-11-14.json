@@ -1,0 +1,51 @@
+{
+  "version": 1,
+  "exportedAt": "2026-11-15T05:03:51.000Z",
+  "roster": [
+    {
+      "id": "juni",
+      "name": "Juni",
+      "number": ""
+    },
+    {
+      "id": "ezra",
+      "name": "Ezra",
+      "number": ""
+    }
+  ],
+  "seasons": [
+    "2026-27"
+  ],
+  "games": [
+    {
+      "id": "juni-2026-11-14-st-mikes",
+      "season": "2026-27",
+      "date": "2026-11-14",
+      "opponent": "St. Mike's",
+      "players": [
+        {
+          "id": "juni",
+          "name": "Juni",
+          "number": "",
+          "stats": {
+            "pts": 8,
+            "reb": 3,
+            "ast": 0,
+            "stl": 1,
+            "blk": 0,
+            "to": 0,
+            "fgm": 0,
+            "fga": 0,
+            "tpm": 0,
+            "tpa": 0,
+            "ftm": 0,
+            "fta": 0,
+            "min": 0
+          }
+        }
+      ],
+      "shots": []
+    }
+  ],
+  "highlights": []
+}
