@@ -1,4 +1,4 @@
-const CACHE = "bball-stats-v1";
+const CACHE = "bball-stats-v2";
 const BASE = "/basketball-stats/";
 const ASSETS = [
   BASE,

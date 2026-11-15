@@ -114,6 +114,16 @@ table.stats tr:last-child td{border-bottom:0}
   .btn,.tab,input,select{min-height:44px}
 }
 
+.stepper.stat-to .lab{color:var(--ink);font-weight:800}
+.stepper.foul-warn,.stepper.foul-out{border-radius:8px;padding:6px;border:1px solid #f0d49a;background:var(--warn-soft)}
+.stepper.foul-warn .lab,.stepper.foul-warn .val{color:var(--warn)}
+.stepper.foul-out{border-color:#e8b4b0;background:#fdecea}
+.stepper.foul-out .lab,.stepper.foul-out .val{color:var(--danger)}
+.foul-msg{margin:0 0 8px}
+.foul-badge{display:inline-block;font-size:12px;font-weight:800;border-radius:999px;padding:4px 10px;letter-spacing:.2px}
+.foul-badge.warn{background:var(--warn-soft);color:var(--warn);border:1px solid #f0d49a}
+.foul-badge.out{background:#fdecea;color:var(--danger);border:1px solid #e8b4b0}
+
   </style>
 </head>
 <body>
@@ -161,16 +171,16 @@ table.stats tr:last-child td{border-bottom:0}
 
   var LABELS = {
     pts: "PTS", reb: "REB", ast: "AST", stl: "STL",
-    blk: "BLK", to: "TO", min: "MIN",
+    blk: "BLK", to: "Turnovers (TO)", pf: "Fouls (PF)", min: "MIN",
     fgm: "FGM", fga: "FGA", tpm: "3PM", tpa: "3PA", ftm: "FTM", fta: "FTA"
   };
-  var SIMPLE_STATS = ["pts", "reb", "ast", "stl", "blk", "to", "min"];
+  var SIMPLE_STATS = ["pts", "reb", "ast", "stl", "blk", "min"];
   var SHOOTING_PAIRS = [["fgm", "fga"], ["tpm", "tpa"], ["ftm", "fta"]];
-  var ALL_KEYS = SIMPLE_STATS.concat(["fgm", "fga", "tpm", "tpa", "ftm", "fta"]);
+  var ALL_KEYS = ["pts", "reb", "ast", "stl", "blk", "to", "pf", "min", "fgm", "fga", "tpm", "tpa", "ftm", "fta"];
 
   function emptyStats() {
     return {
-      pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0,
+      pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0, pf: 0,
       fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, min: 0
     };
   }
@@ -316,6 +326,10 @@ table.stats tr:last-child td{border-bottom:0}
     var next = emptyStats();
     for (var i = 0; i < ALL_KEYS.length; i++) {
       var key = ALL_KEYS[i];
+      if (value[key] === undefined || value[key] === null) {
+        // Older saves and imports may omit pf; default to 0.
+        continue;
+      }
       if (typeof value[key] !== "number" || !isFinite(value[key])) return null;
       next[key] = value[key];
     }
@@ -595,9 +609,9 @@ table.stats tr:last-child td{border-bottom:0}
     );
   }
 
-  function stepperHtml(playerId, key, value, minusDisabled) {
+  function stepperHtml(playerId, key, value, minusDisabled, extraClass) {
     return (
-      '<div class="stepper">' +
+      '<div class="stepper' + (extraClass ? " " + extraClass : "") + '">' +
         '<div class="lab">' + LABELS[key] + "</div>" +
         '<div class="row">' +
           '<button type="button" class="btn pm" data-act="bump" data-pid="' + esc(playerId) + '" data-key="' + key + '" data-delta="-1"' +
@@ -607,6 +621,18 @@ table.stats tr:last-child td{border-bottom:0}
         "</div>" +
       "</div>"
     );
+  }
+
+  function foulClass(pf) {
+    if (pf >= 5) return "foul-out";
+    if (pf >= 4) return "foul-warn";
+    return "";
+  }
+
+  function foulBadge(pf) {
+    if (pf >= 5) return '<div class="foul-msg"><span class="foul-badge out">Fouled out</span></div>';
+    if (pf >= 4) return '<div class="foul-msg"><span class="foul-badge warn">4 fouls</span></div>';
+    return "";
   }
 
   function playerBoardHtml(player) {
@@ -622,17 +648,27 @@ table.stats tr:last-child td{border-bottom:0}
       return '<button type="button" class="btn ' + row[2] + '" data-act="shortcut" data-pid="' + esc(player.id) + '" data-kind="' + row[0] + '">' + row[1] + "</button>";
     }).join("");
     var simple = SIMPLE_STATS.map(function (key) {
-      return stepperHtml(player.id, key, s[key], s[key] <= 0);
+      return stepperHtml(player.id, key, s[key] || 0, (s[key] || 0) <= 0);
     }).join("");
     var shooting = SHOOTING_PAIRS.map(function (pair) {
       var made = pair[0], att = pair[1];
       return stepperHtml(player.id, made, s[made], s[made] <= 0) +
         stepperHtml(player.id, att, s[att], s[att] <= s[made]);
     }).join("");
+    var pf = s.pf || 0;
+    var tos = s.to || 0;
+    var foulsBlock =
+      '<div class="caption" style="margin-top:1rem">Turnovers &amp; fouls</div>' +
+      foulBadge(pf) +
+      '<div class="grid-stats">' +
+        stepperHtml(player.id, "to", tos, tos <= 0, "stat-to") +
+        stepperHtml(player.id, "pf", pf, pf <= 0, foulClass(pf)) +
+      "</div>";
     return (
       '<div class="caption">Score</div>' +
       '<div class="shortcuts">' + shots + "</div>" +
       '<div class="grid-stats">' + simple + "</div>" +
+      foulsBlock +
       '<div class="caption" style="margin-top:1rem">Shooting</div>' +
       '<div class="grid-stats">' + shooting + "</div>" +
       '<div class="pcts"><span>FG <strong>' + pct(s.fgm, s.fga) + "</strong></span>" +
@@ -839,7 +875,7 @@ table.stats tr:last-child td{border-bottom:0}
       return html;
     }
     html += '<div class="table-wrap"><table class="stats"><thead><tr>' +
-      "<th>Player</th><th>GP</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>MIN</th>" +
+      "<th>Player</th><th>GP</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>PF</th><th>MIN</th>" +
       "<th>FGM-A</th><th>FG%</th><th>3PM-A</th><th>3P%</th><th>FTM-A</th><th>FT%</th>" +
       "</tr></thead><tbody>";
     tot.rows.forEach(function (row) {
@@ -850,6 +886,7 @@ table.stats tr:last-child td{border-bottom:0}
       html += "<tr><td>" + esc(playerLabel(row)) + "</td><td>" + gp + "</td>" +
         "<td>" + num("pts", 1) + "</td><td>" + num("reb", 1) + "</td><td>" + num("ast", 1) + "</td>" +
         "<td>" + num("stl", 1) + "</td><td>" + num("blk", 1) + "</td><td>" + num("to", 1) + "</td>" +
+        "<td>" + num("pf", 1) + "</td>" +
         "<td>" + num("min", 1) + "</td>" +
         "<td>" + pair("fgm", "fga") + "</td><td>" + pct(s.fgm, s.fga) + "</td>" +
         "<td>" + pair("tpm", "tpa") + "</td><td>" + pct(s.tpm, s.tpa) + "</td>" +
@@ -1322,7 +1359,7 @@ table.stats tr:last-child td{border-bottom:0}
           opponent: g.opponent,
           player: p.name,
           number: jerseyNumber(p.number),
-          pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, to: s.to, min: s.min,
+          pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, to: s.to, pf: s.pf || 0, min: s.min,
           fgm: s.fgm, fga: s.fga, tpm: s.tpm, tpa: s.tpa, ftm: s.ftm, fta: s.fta,
           fg_pct: s.fga ? (s.fgm / s.fga) : "",
           tp_pct: s.tpa ? (s.tpm / s.tpa) : "",
@@ -1335,7 +1372,7 @@ table.stats tr:last-child td{border-bottom:0}
   }
 
   function exportCSV() {
-    var cols = ["date","season","opponent","player","number","pts","reb","ast","stl","blk","to","min","fgm","fga","tpm","tpa","ftm","fta","fg_pct","tp_pct","ft_pct","game_id"];
+    var cols = ["date","season","opponent","player","number","pts","reb","ast","stl","blk","to","pf","min","fgm","fga","tpm","tpa","ftm","fta","fg_pct","tp_pct","ft_pct","game_id"];
     var rows = gameLogRows();
     var lines = [cols.join(",")];
     rows.forEach(function (r) {
