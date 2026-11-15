@@ -16,7 +16,7 @@ A phone-first basketball stat tracker for live games, season totals, shot charts
 2. Tap the three-dot menu.
 3. Tap **Add to Home screen** or **Install app**.
 
-The icon will sit on the Home Screen and open like an app. A signal is only needed the first time (and later, to pick up updates). After that, you can keep entering stats offline. Games are stored on that phone, not on this website.
+The icon will sit on the Home Screen and open like an app. A signal is only needed the first time (and later, to pick up updates). After that, you can keep entering stats offline; changes sync when you have signal again.
 
 ## What it tracks
 
@@ -29,16 +29,22 @@ The icon will sit on the Home Screen and open like an app. A signal is only need
 - Season totals, per-game averages, shooting percentages, and a combined season shot chart, with a season selector (default 2026-27)
 - A highlights list of video links (title, player, date). YouTube, Google Drive, and Hudl links can be saved and opened later
 
-## Sharing stats (Export / Import)
+## Sync and the team code
 
-Stats live on each phone. To combine them:
+Saved games, the roster (names and jersey numbers), seasons, and highlight links are stored online (Firebase) and show up on every phone and computer that opens the link, usually within a few seconds.
+
+- **Anyone with the link can view** games, season stats, and highlights. No sign-in needed.
+- **Saving, editing, deleting, adding players, highlight links, and Import need the team code.** Tap **🔒 Team code** at the top, type the code, and tap **Unlock editing**. You only do this once per device; the button then reads **✓ Editing on**.
+- Without the code you can still keep score during a game, but **Save / End Game** asks for the code first.
+- The first time a device unlocks editing, any games that were saved only on that device are uploaded. Games already online (same game id, or same date, opponent, players and stat lines) are skipped, so there are no duplicates.
+
+The team code is not stored in this repository. Ask the team admin for it.
+
+## Export / Import
 
 1. Tap **Export JSON** to download every game, the roster, seasons, and highlight links. **Export CSV** downloads a spreadsheet of the game log.
-2. Send the JSON file to whoever should have a copy (text, email, AirDrop, and so on).
-3. On the other phone, open the app, tap **Import**, and choose that JSON file.
-
-Import **merges**. Games already present (matched by id) are skipped, so you will not get duplicates. New games and highlight links are added.
+2. **Import** (editors only) uploads games from a JSON export. Duplicates are skipped.
 
 ## Privacy
 
-The page is public, but game data is not uploaded to GitHub or any server. Nothing is stored here except the app itself. Default players are first names only (Juni and Ezra).
+The page is public and anyone with the link can read the stats. Default players are first names only (Juni and Ezra).

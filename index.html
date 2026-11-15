@@ -47,6 +47,7 @@ button{touch-action:manipulation;-webkit-tap-highlight-color:transparent}
 .btn.small{padding:6px 10px;font-size:13px;min-height:40px}
 .btn.danger:hover,.btn.danger.armed{border-color:var(--danger);color:var(--danger)}
 .btn.danger.armed{background:#fdecea}
+.btn[hidden]{display:none}
 .btn.link{border:0;background:none;color:var(--accent);padding:2px 4px;text-decoration:underline;min-height:0}
 .banner{max-width:780px;margin:10px auto 0;padding:10px 14px;border-radius:8px;background:var(--warn-soft);color:var(--warn);border:1px solid #f0d49a;display:none}
 .banner.show{display:flex;align-items:flex-start;justify-content:space-between;gap:10px}
@@ -124,6 +125,21 @@ table.stats tr:last-child td{border-bottom:0}
 .foul-badge.warn{background:var(--warn-soft);color:var(--warn);border:1px solid #f0d49a}
 .foul-badge.out{background:#fdecea;color:var(--danger);border:1px solid #e8b4b0}
 
+.sync{font-size:12px;font-weight:650;color:var(--muted);white-space:nowrap}
+.sync.ok{color:var(--accent)}
+.sync.off{color:var(--warn)}
+.btn.lock{border-color:var(--accent);color:var(--accent)}
+.btn.lock.on{background:var(--accent-soft)}
+.viewonly-note{font-size:14px;color:var(--warn);background:var(--warn-soft);border:1px solid #f0d49a;border-radius:8px;padding:10px 12px;margin:0 0 12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.viewonly-note span{flex:1 1 14rem}
+.local-tag{display:inline-block;font-size:11px;font-weight:750;color:var(--warn);background:var(--warn-soft);border:1px solid #f0d49a;border-radius:999px;padding:1px 8px;margin-left:6px}
+.modal{position:fixed;inset:0;background:rgba(20,28,34,.45);z-index:50;display:flex;align-items:flex-start;justify-content:center;padding:calc(60px + var(--safe-top)) 16px 16px}
+.modal[hidden]{display:none}
+.modal-card{background:#fff;border-radius:12px;padding:18px;width:100%;max-width:400px;box-shadow:0 10px 30px rgba(0,0,0,.2)}
+.modal-card h2{font-size:18px;margin:0 0 6px}
+.code-msg{min-height:1.4em;margin:8px 0 0;font-weight:650;color:var(--danger)}
+.code-msg.ok{color:var(--accent)}
+
   </style>
 </head>
 <body>
@@ -134,9 +150,11 @@ table.stats tr:last-child td{border-bottom:0}
         Game Stats <small>works offline</small>
       </div>
       <div class="tools">
+        <span id="syncStatus" class="sync" role="status" aria-live="polite">Connecting…</span>
+        <button type="button" class="btn lock" id="codeBtn" data-act="team-code">🔒 Team code</button>
         <button type="button" class="btn" data-act="export-json">Export JSON</button>
         <button type="button" class="btn" data-act="export-csv">Export CSV</button>
-        <button type="button" class="btn" data-act="import">Import</button>
+        <button type="button" class="btn" id="importBtn" data-act="import" hidden>Import</button>
         <input type="file" id="fileImport" accept=".json,application/json">
       </div>
     </div>
@@ -148,11 +166,23 @@ table.stats tr:last-child td{border-bottom:0}
     </nav>
   </header>
   <div id="installTip" class="banner tip" role="note">
-    <span>Add this to your Home Screen to use it like an app. iPhone: open in Safari, tap Share, then Add to Home Screen. Android: in Chrome, tap the menu, then Add to Home screen. Games are saved on this phone — use Export to share them.</span>
+    <span>Add this to your Home Screen to use it like an app. iPhone: open in Safari, tap Share, then Add to Home Screen. Android: in Chrome, tap the menu, then Add to Home screen. Saved games sync to every phone and computer that opens this link.</span>
     <button type="button" class="btn tip-x small" data-act="dismiss-hint" aria-label="Dismiss">Got it</button>
   </div>
   <div id="banner" class="banner" role="status" aria-live="polite"></div>
   <main id="main"></main>
+  <div id="codeDlg" class="modal" hidden>
+    <form class="modal-card" id="codeForm" autocomplete="off">
+      <h2>Enter team code</h2>
+      <p class="hint">Anyone with the link can view stats. The team code lets this device save, edit, and delete games. You only enter it once on each device.</p>
+      <label class="field"><span>Team code</span><input id="codeInput" type="text" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" enterkeyhint="done"></label>
+      <p id="codeMsg" class="code-msg" role="alert"></p>
+      <div class="actions">
+        <button type="submit" class="btn primary" id="codeSubmit">Unlock editing</button>
+        <button type="button" class="btn" data-act="code-cancel">Cancel</button>
+      </div>
+    </form>
+  </div>
   <script>
 /* Game Stats — phone-first basketball tracker */
 (function () {
@@ -161,6 +191,8 @@ table.stats tr:last-child td{border-bottom:0}
   var STORAGE_KEY = "bball-stats-v1";
   var HINT_KEY = "bball-stats-hint-v1";
   var BASE = "/basketball-stats/";
+  var EDITOR_KEY = "bball-stats-editor-v1";
+  var MIGRATED_KEY = "bball-stats-cloud-migrated-v1";
 
   var COURT_W = 50;
   var COURT_H = 42;
@@ -373,7 +405,9 @@ table.stats tr:last-child td{border-bottom:0}
       current: freshGame(roster, season),
       live: null,
       games: [],
-      highlights: []
+      highlights: [],
+      pending: [],
+      pendingHighlights: []
     };
   }
 
@@ -478,6 +512,20 @@ table.stats tr:last-child td{border-bottom:0}
       raw.highlights.forEach(function (h) {
         var nh = normalizeHighlight(h);
         if (nh) base.highlights.push(nh);
+      });
+    }
+    base.pending = [];
+    if (Array.isArray(raw.pending)) {
+      raw.pending.forEach(function (g) {
+        var ng = normalizeGame(g);
+        if (ng) base.pending.push(ng);
+      });
+    }
+    base.pendingHighlights = [];
+    if (Array.isArray(raw.pendingHighlights)) {
+      raw.pendingHighlights.forEach(function (h) {
+        var nh = normalizeHighlight(h);
+        if (nh) base.pendingHighlights.push(nh);
       });
     }
     if (raw.current) {
@@ -726,10 +774,16 @@ table.stats tr:last-child td{border-bottom:0}
     var editing = !!(g && g.id);
     var seasons = seasonOptions(g.season);
     var html = "";
+    var canEdit = cloud.editor;
     if (editing) {
-      html += '<div class="edit-banner"><span>Editing ' + esc(formatDate(g.date)) +
+      html += '<div class="edit-banner"><span>' + (canEdit ? "Editing " : "Viewing ") + esc(formatDate(g.date)) +
         (g.opponent ? " vs " + esc(g.opponent) : "") +
-        '.</span><button type="button" class="btn small" data-act="done-edit">Done</button></div>';
+        (canEdit ? "." : ". Changes won't be saved without the team code.") +
+        '</span><button type="button" class="btn small" data-act="done-edit">Done</button></div>';
+    }
+    if (!canEdit) {
+      html += '<div class="viewonly-note"><span>View-only on this device. You can keep score here, but saving a game needs the team code.</span>' +
+        '<button type="button" class="btn small" data-act="team-code">🔒 Enter team code</button></div>';
     }
     html += '<div class="panel"><h2>Game</h2>' +
       '<div class="fields">' +
@@ -738,7 +792,7 @@ table.stats tr:last-child td{border-bottom:0}
         '<label class="field"><span>Season</span><select id="gameSeason">' + optionList(seasons, g.season) + "</select></label>" +
       "</div>" +
       '<div class="actions">' +
-        (editing
+        (editing && canEdit
           ? '<button type="button" class="btn primary" data-act="save-changes">Save changes</button>' +
             '<button type="button" class="btn" data-act="save-end">Save / End Game</button>'
           : '<button type="button" class="btn primary" data-act="save-end">Save / End Game</button>') +
@@ -754,7 +808,7 @@ table.stats tr:last-child td{border-bottom:0}
         '<div class="panel-head"><h2>' +
           (jerseyNumber(player.number) ? '<span class="num">#' + esc(jerseyNumber(player.number)) + "</span>" : "") +
           esc(player.name) + "</h2>" +
-          '<button type="button" class="btn small danger" data-act="remove-player" data-pid="' + esc(player.id) + '">Remove</button>' +
+          (canEdit ? '<button type="button" class="btn small danger" data-act="remove-player" data-pid="' + esc(player.id) + '">Remove</button>' : "") +
         "</div>" +
         '<div class="fields" style="margin-bottom:12px">' +
           '<label class="field"><span>Jersey number</span>' +
@@ -765,6 +819,7 @@ table.stats tr:last-child td{border-bottom:0}
       "</div>";
     });
 
+    if (!canEdit) return html;
     html += '<div class="panel"><h2>Add a player</h2>' +
       '<div class="fields">' +
         '<label class="field"><span>Player name</span><input type="text" id="newName" value="' + esc(ui.newName) + '" placeholder="Name"></label>' +
@@ -782,7 +837,7 @@ table.stats tr:last-child td{border-bottom:0}
   }
 
   function renderGames() {
-    var seasons = seasonOptions(ui.gamesSeason);
+    var seasons = seasonOptions(ui.gamesSeason === "all" ? null : ui.gamesSeason);
     if (!ui.gamesSeason) ui.gamesSeason = "all";
     var list = data.games.slice().sort(function (a, b) {
       if (a.date === b.date) return (b.savedAt || "").localeCompare(a.savedAt || "");
@@ -798,20 +853,24 @@ table.stats tr:last-child td{border-bottom:0}
         optionList(seasons, ui.gamesSeason) +
       "</select></label></div>";
     if (!list.length) {
-      html += '<p class="empty">No saved games yet. Track a game, then tap Save / End Game.</p></div>';
+      html += '<p class="empty">' + (cloud.gotGames || cloud.failed ? "No saved games yet. Track a game, then tap Save / End Game." : "Loading games…") + "</p></div>";
       return html;
     }
     html += list.map(function (g) {
       var armed = ui.pendingDeleteId === g.id;
+      var localOnly = isPendingId(g.id);
       return '<div class="game-card">' +
         '<button type="button" class="game-main" data-act="open-game" data-gid="' + esc(g.id) + '">' +
           '<div class="g-date">' + esc(formatDate(g.date)) + (g.season ? " · " + esc(g.season) : "") + "</div>" +
-          '<div class="g-opp">' + (g.opponent ? "vs " + esc(g.opponent) : "No opponent listed") + "</div>" +
+          '<div class="g-opp">' + (g.opponent ? "vs " + esc(g.opponent) : "No opponent listed") +
+            (localOnly ? '<span class="local-tag">On this device only</span>' : "") + "</div>" +
           '<div class="g-line">' + esc(gameSummaryLine(g)) + "</div>" +
         "</button>" +
-        '<button type="button" class="btn small danger' + (armed ? " armed" : "") + '" data-act="delete-game" data-gid="' + esc(g.id) + '">' +
-          (armed ? "Tap again to delete" : "Delete") + "</button>" +
-        (armed ? '<button type="button" class="btn small" data-act="cancel-delete">Cancel</button>' : "") +
+        (cloud.editor
+          ? '<button type="button" class="btn small danger' + (armed ? " armed" : "") + '" data-act="delete-game" data-gid="' + esc(g.id) + '">' +
+            (armed ? "Tap again to delete" : "Delete") + "</button>" +
+            (armed ? '<button type="button" class="btn small" data-act="cancel-delete">Cancel</button>' : "")
+          : "") +
       "</div>";
     }).join("") + "</div>";
     return html;
@@ -928,14 +987,15 @@ table.stats tr:last-child td{border-bottom:0}
       if (!opts.some(function (o) { return o.id === p.id; })) opts.push(p);
     });
     var html = '<div class="panel"><h2>Highlights</h2>' +
-      '<p class="hint">Save YouTube, Google Drive, or Hudl links with a title, player, and date. They stay on this phone (and in Export). You can also play a clip from this device — that file is not saved and goes away when you refresh.</p>' +
+      '<p class="hint">Save YouTube, Google Drive, or Hudl links with a title, player, and date. Saved links sync to every device. You can also play a clip from this device — that file is not saved and goes away when you refresh.</p>' +
       '<div class="caption">Play a video from this phone</div>' +
       '<input type="file" id="localVideo" accept="video/*">' +
       (ui.localVideo
         ? '<div class="local-video"><p class="hint">' + esc(ui.localVideo.name) + " — playing on this device only, not saved.</p>" +
           '<video src="' + esc(ui.localVideo.url) + '" controls playsinline></video></div>'
         : "") +
-      '<div class="caption" style="margin-top:1rem">Save a link</div>' +
+      (cloud.editor ? "" : '<div class="viewonly-note" style="margin-top:1rem"><span>Saving highlight links needs the team code.</span><button type="button" class="btn small" data-act="team-code">🔒 Enter team code</button></div>') +
+      (cloud.editor ? '<div class="caption" style="margin-top:1rem">Save a link</div>' +
       '<div class="fields">' +
         '<label class="field"><span>Title</span><input type="text" id="hlTitle" value="' + esc(ui.hlTitle) + '" placeholder="Game-winner"></label>' +
         '<label class="field"><span>Player</span><select id="hlPlayer">' +
@@ -949,7 +1009,7 @@ table.stats tr:last-child td{border-bottom:0}
         '<label class="field wide"><span>Video link</span><input type="url" id="hlUrl" value="' + esc(ui.hlUrl) + '" placeholder="https://"></label>' +
       "</div>" +
       '<div class="actions"><button type="button" class="btn primary" data-act="add-highlight"' +
-        (ui.hlUrl.trim() ? "" : " disabled") + ">Save link</button></div>";
+        (ui.hlUrl.trim() ? "" : " disabled") + ">Save link</button></div>" : "");
 
     if (!data.highlights.length) {
       html += '<p class="empty">No saved highlight links yet.</p></div>';
@@ -969,7 +1029,8 @@ table.stats tr:last-child td{border-bottom:0}
       if (embed) {
         block += '<iframe src="' + esc(embed) + '" title="' + esc(item.title || "Highlight") + '" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen></iframe>';
       }
-      block += '<div class="actions"><button type="button" class="btn small danger" data-act="remove-highlight" data-hid="' + esc(item.id) + '">Remove</button></div></div>';
+      if (cloud.editor) block += '<div class="actions"><button type="button" class="btn small danger" data-act="remove-highlight" data-hid="' + esc(item.id) + '">Remove</button></div>';
+      block += "</div>";
       return block;
     }).join("");
     html += items + "</div>";
@@ -997,7 +1058,47 @@ table.stats tr:last-child td{border-bottom:0}
     });
     var tip = document.getElementById("installTip");
     if (tip) tip.classList.toggle("show", !!ui.showHint);
+    renderHeader();
     bindDynamic();
+  }
+
+  function renderHeader() {
+    var btn = document.getElementById("codeBtn");
+    if (btn) {
+      btn.textContent = cloud.editor ? "✓ Editing on" : "🔒 Team code";
+      btn.classList.toggle("on", cloud.editor);
+    }
+    var imp = document.getElementById("importBtn");
+    if (imp) imp.hidden = !cloud.editor;
+    var st = document.getElementById("syncStatus");
+    if (st) {
+      var text, cls;
+      if (cloud.failed) { text = "Offline · this device only"; cls = "off"; }
+      else if (!cloud.gotGames) { text = "Connecting…"; cls = ""; }
+      else if (cloud.connected) { text = cloud.editor ? "Synced" : "Synced · view-only"; cls = "ok"; }
+      else { text = "Offline · will sync"; cls = "off"; }
+      st.textContent = text;
+      st.className = "sync" + (cls ? " " + cls : "");
+    }
+  }
+
+  // Re-render without stealing focus from a field the user is typing in.
+  var deferredRender = false;
+  function softRender() {
+    var a = document.activeElement;
+    var main = document.getElementById("main");
+    if (a && main && main.contains(a) && /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName) && a.type !== "file") {
+      renderHeader();
+      if (!deferredRender) {
+        deferredRender = true;
+        a.addEventListener("blur", function () {
+          deferredRender = false;
+          setTimeout(render, 0);
+        }, { once: true });
+      }
+      return;
+    }
+    render();
   }
 
   function bindField(id, setter) {
@@ -1040,6 +1141,7 @@ table.stats tr:last-child td{border-bottom:0}
       });
       el.addEventListener("change", function () {
         updateNumber(el.getAttribute("data-pid"), el.value);
+        pushRoster();
         render();
       });
     });
@@ -1114,6 +1216,11 @@ table.stats tr:last-child td{border-bottom:0}
 
   function saveEndGame(thenNew) {
     var g = data.current;
+    if (!cloud.editor) {
+      showBanner("Saving needs the team code. Your game is still here — enter the code, then tap Save again.", "warn");
+      openCodeDialog();
+      return;
+    }
     if (gameIsEmpty(g) && !g.id) {
       showBanner("Add an opponent or some stats before saving.", "warn");
       return;
@@ -1121,6 +1228,8 @@ table.stats tr:last-child td{border-bottom:0}
     updateRosterFromGame(g);
     var snap = snapshotGame(g, g.id);
     upsertGame(snap);
+    cloudSaveGame(snap);
+    pushRoster();
     saveData();
     if (thenNew) {
       data.live = null;
@@ -1203,6 +1312,7 @@ table.stats tr:last-child td{border-bottom:0}
     });
     ui.newName = "";
     ui.newNumber = "";
+    if (!existing) pushRoster();
     saveData();
     render();
   }
@@ -1310,12 +1420,22 @@ table.stats tr:last-child td{border-bottom:0}
   }
 
   function deleteGame(id) {
+    if (!cloud.editor) { openCodeDialog(); return; }
+    var wasPending = isPendingId(id);
+    if (!wasPending && !window.Cloud) {
+      showBanner("Can't reach the sync service, so this game can't be deleted right now.", "warn");
+      return;
+    }
     if (ui.pendingDeleteId !== id) {
       ui.pendingDeleteId = id;
       render();
       return;
     }
     data.games = data.games.filter(function (g) { return g.id !== id; });
+    data.pending = data.pending.filter(function (g) { return g.id !== id; });
+    if (!wasPending) {
+      window.Cloud.deleteGame(id).catch(function (err) { handleWriteError(err, null); });
+    }
     if (data.current && data.current.id === id) {
       data.current.id = null;
     }
@@ -1328,13 +1448,16 @@ table.stats tr:last-child td{border-bottom:0}
   function addHighlight() {
     var url = (ui.hlUrl || "").trim();
     if (!url) return;
-    data.highlights.push({
+    if (!cloud.editor) { openCodeDialog(); return; }
+    var item = {
       id: newId(),
       title: (ui.hlTitle || "").trim() || "Highlight",
       playerId: ui.hlPlayer || "team",
       date: (ui.hlDate || "").trim() || todayInEastern(),
       url: url
-    });
+    };
+    data.highlights.push(item);
+    cloudAddHighlights([item]);
     ui.hlTitle = "";
     ui.hlUrl = "";
     saveData();
@@ -1408,38 +1531,39 @@ table.stats tr:last-child td{border-bottom:0}
 
   function mergeImport(incoming) {
     var src = normalizeData(incoming);
-    var existingIds = {};
-    data.games.forEach(function (g) { existingIds[g.id] = true; });
+    var known = data.games.concat(data.pending);
     var added = 0, skipped = 0;
     src.games.forEach(function (g) {
-      if (existingIds[g.id]) { skipped += 1; return; }
+      if (isDupOf(g, known)) { skipped += 1; return; }
       data.games.push(g);
-      existingIds[g.id] = true;
+      known.push(g);
+      cloudSaveGame(g);
       added += 1;
       if (data.seasons.indexOf(g.season) === -1) data.seasons.push(g.season);
     });
-    var hlIds = {};
-    data.highlights.forEach(function (h) { hlIds[h.id] = true; });
-    var hlAdded = 0;
+    var hlNew = [];
     src.highlights.forEach(function (h) {
-      if (hlIds[h.id]) return;
+      if (highlightDup(h, data.highlights.concat(data.pendingHighlights))) return;
       data.highlights.push(h);
-      hlIds[h.id] = true;
-      hlAdded += 1;
+      hlNew.push(h);
     });
+    if (hlNew.length) cloudAddHighlights(hlNew);
+    var rosterChanged = false;
     src.roster.forEach(function (r) {
       var ex = data.roster.find(function (x) { return x.id === r.id || x.name.toLowerCase() === r.name.toLowerCase(); });
-      if (!ex) data.roster.push({ id: r.id, name: r.name, number: r.number });
+      if (!ex) { data.roster.push({ id: r.id, name: r.name, number: r.number }); rosterChanged = true; }
     });
     src.seasons.forEach(function (s) {
-      if (data.seasons.indexOf(s) === -1) data.seasons.push(s);
+      if (data.seasons.indexOf(s) === -1) { data.seasons.push(s); rosterChanged = true; }
     });
+    if (rosterChanged) pushRoster();
     saveData();
-    return { added: added, skipped: skipped, highlights: hlAdded };
+    return { added: added, skipped: skipped, highlights: hlNew.length };
   }
 
   function handleImport(file) {
     if (!file) return;
+    if (!cloud.editor) { openCodeDialog(); return; }
     var reader = new FileReader();
     reader.onload = function () {
       try {
@@ -1470,6 +1594,7 @@ table.stats tr:last-child td{border-bottom:0}
     }
     if (data.seasons.indexOf(next) === -1) data.seasons.push(next);
     ui.seasonId = next;
+    if (cloud.editor && window.Cloud) window.Cloud.addSeason(next).catch(function (err) { handleWriteError(err, null); });
     saveData();
     render();
   }
@@ -1524,14 +1649,18 @@ table.stats tr:last-child td{border-bottom:0}
     else if (act === "season-chart") { ui.seasonChartPlayer = pid; render(); }
     else if (act === "add-season") addSeason();
     else if (act === "add-highlight") addHighlight();
-    else if (act === "remove-highlight") {
-      data.highlights = data.highlights.filter(function (h) { return h.id !== t.getAttribute("data-hid"); });
-      saveData();
-      render();
+    else if (act === "remove-highlight") removeHighlight(t.getAttribute("data-hid"));
+    else if (act === "team-code") {
+      if (cloud.editor) showBanner("This device can save, edit, and delete games.", "ok");
+      else openCodeDialog();
     }
+    else if (act === "code-cancel") closeCodeDialog();
     else if (act === "export-json") exportJSON();
     else if (act === "export-csv") exportCSV();
-    else if (act === "import") document.getElementById("fileImport").click();
+    else if (act === "import") {
+      if (cloud.editor) document.getElementById("fileImport").click();
+      else openCodeDialog();
+    }
     else if (act === "dismiss-hint") {
       ui.showHint = false;
       try { localStorage.setItem(HINT_KEY, "1"); } catch (err) {}
@@ -1539,7 +1668,331 @@ table.stats tr:last-child td{border-bottom:0}
     }
   }
 
+  /* ---------- Cloud sync (Firebase Firestore; see the module script below) ---------- */
+  var cloud = {
+    uid: null,
+    editor: false,
+    gotGames: false,
+    gotRoster: false,
+    rosterEmpty: false,
+    gotHighlights: false,
+    connected: false,
+    failed: false
+  };
+  var cloudGames = [];
+  var cloudHighlightsRaw = [];
+
+  function normText(s) {
+    return String(s || "").toLowerCase().replace(/[^a-z0-9]/g, "");
+  }
+
+  function gameSignature(g) {
+    var players = (g.players || []).map(function (p) {
+      var st = p.stats || {};
+      return normText(p.name) + ":" + ALL_KEYS.map(function (k) { return st[k] || 0; }).join(",");
+    }).sort().join("|");
+    return [g.date, normText(g.opponent), players].join("#");
+  }
+
+  function isDupOf(g, list) {
+    var sig = gameSignature(g);
+    return list.some(function (c) { return c.id === g.id || gameSignature(c) === sig; });
+  }
+
+  function highlightDup(h, list) {
+    return list.some(function (x) { return x.id === h.id || (x.url === h.url && x.playerId === h.playerId && x.date === h.date); });
+  }
+
+  function isPendingId(id) {
+    return data.pending.some(function (g) { return g.id === id; });
+  }
+
+  function forCloud(obj) {
+    return JSON.parse(JSON.stringify(obj));
+  }
+
+  function upsertPending(g) {
+    var idx = data.pending.findIndex(function (x) { return x.id === g.id; });
+    if (idx >= 0) data.pending[idx] = clone(g);
+    else data.pending.push(clone(g));
+  }
+
+  function setEditor(on) {
+    cloud.editor = !!on;
+    try {
+      if (on && cloud.uid) localStorage.setItem(EDITOR_KEY, cloud.uid);
+      else if (!on) localStorage.removeItem(EDITOR_KEY);
+    } catch (e) {}
+  }
+
+  function handleWriteError(err, game) {
+    var code = err && err.code;
+    if (game) { upsertPending(game); saveData(); }
+    if (code === "permission-denied") {
+      setEditor(false);
+      showBanner("This device needs the team code again to save. Tap 🔒 Team code at the top.", "warn");
+    } else {
+      showBanner("Couldn't sync a change. It will retry when you reopen the app.", "warn");
+    }
+    softRender();
+  }
+
+  function cloudSaveGame(game) {
+    if (window.Cloud && cloud.editor) {
+      var payload = forCloud(game);
+      window.Cloud.saveGame(payload).then(function () {
+        data.pending = data.pending.filter(function (g) { return g.id !== game.id; });
+        saveData();
+      }).catch(function (err) { handleWriteError(err, game); });
+    } else {
+      upsertPending(game);
+    }
+  }
+
+  function cloudAddHighlights(items) {
+    if (!items.length) return;
+    if (window.Cloud && cloud.editor) {
+      window.Cloud.addHighlights(forCloud(items)).catch(function (err) {
+        items.forEach(function (h) { if (!highlightDup(h, data.pendingHighlights)) data.pendingHighlights.push(h); });
+        handleWriteError(err, null);
+      });
+    } else {
+      items.forEach(function (h) { if (!highlightDup(h, data.pendingHighlights)) data.pendingHighlights.push(h); });
+    }
+  }
+
+  function removeHighlight(id) {
+    if (!cloud.editor) { openCodeDialog(); return; }
+    var pendingHit = data.pendingHighlights.some(function (h) { return h.id === id; });
+    var raw = cloudHighlightsRaw.find(function (h) { return h && h.id === id; });
+    if (raw && !window.Cloud) {
+      showBanner("Can't reach the sync service, so this link can't be removed right now.", "warn");
+      return;
+    }
+    data.pendingHighlights = data.pendingHighlights.filter(function (h) { return h.id !== id; });
+    data.highlights = data.highlights.filter(function (h) { return h.id !== id; });
+    if (raw) window.Cloud.removeHighlight(raw).catch(function (err) { handleWriteError(err, null); });
+    else if (!pendingHit) { /* local-only leftover */ }
+    saveData();
+    render();
+  }
+
+  var rosterTimer = null;
+  function pushRoster() {
+    if (!cloud.editor || !window.Cloud) return;
+    clearTimeout(rosterTimer);
+    rosterTimer = setTimeout(function () {
+      window.Cloud.saveRoster(forCloud(data.roster), data.seasons.slice()).catch(function (err) { handleWriteError(err, null); });
+    }, 400);
+  }
+
+  function rebuildGames() {
+    if (!cloud.gotGames) return;
+    data.pending = data.pending.filter(function (g) { return !isDupOf(g, cloudGames); });
+    data.games = cloudGames.map(clone).concat(data.pending.map(clone));
+    data.games.forEach(function (g) {
+      if (g.season && data.seasons.indexOf(g.season) === -1) data.seasons.push(g.season);
+    });
+    data.seasons.sort();
+  }
+
+  function rebuildHighlights() {
+    if (!cloud.gotHighlights) return;
+    var list = [];
+    cloudHighlightsRaw.forEach(function (h) {
+      var nh = normalizeHighlight(h);
+      if (nh && !highlightDup(nh, list)) list.push(nh);
+    });
+    data.pendingHighlights = data.pendingHighlights.filter(function (h) { return !highlightDup(h, list); });
+    data.highlights = list.concat(data.pendingHighlights.map(clone));
+  }
+
+  var flushing = false;
+  function flushPending() {
+    if (flushing || !cloud.editor || !window.Cloud || !cloud.gotGames) return;
+    flushing = true;
+    try {
+      var accepted = [];
+      var known = cloudGames.slice();
+      data.pending.slice().forEach(function (g) {
+        if (isDupOf(g, known)) return;
+        known.push(g);
+        accepted.push(g);
+      });
+      data.pending = accepted;
+      accepted.forEach(function (g) { cloudSaveGame(g); });
+      if (cloud.gotHighlights && data.pendingHighlights.length) {
+        var hl = data.pendingHighlights.slice();
+        window.Cloud.addHighlights(forCloud(hl)).then(function () {
+          data.pendingHighlights = data.pendingHighlights.filter(function (h) { return !highlightDup(h, hl); });
+          saveData();
+        }).catch(function (err) { handleWriteError(err, null); });
+      }
+      if (cloud.gotRoster && cloud.rosterEmpty) {
+        cloud.rosterEmpty = false;
+        pushRoster();
+      }
+      if (accepted.length) showBanner("Uploading " + accepted.length + " game" + (accepted.length === 1 ? "" : "s") + " from this device.", "ok");
+      saveData();
+    } finally {
+      flushing = false;
+    }
+  }
+
+  var codeBusy = false;
+  function openCodeDialog() {
+    var dlg = document.getElementById("codeDlg");
+    var msg = document.getElementById("codeMsg");
+    var input = document.getElementById("codeInput");
+    if (!dlg) return;
+    msg.textContent = "";
+    msg.className = "code-msg";
+    input.value = "";
+    dlg.hidden = false;
+    setTimeout(function () { input.focus(); }, 30);
+  }
+
+  function closeCodeDialog() {
+    var dlg = document.getElementById("codeDlg");
+    if (dlg) dlg.hidden = true;
+  }
+
+  function submitCode() {
+    if (codeBusy) return;
+    var input = document.getElementById("codeInput");
+    var msg = document.getElementById("codeMsg");
+    var btn = document.getElementById("codeSubmit");
+    var code = String(input.value || "").trim().toLowerCase();
+    msg.className = "code-msg";
+    if (!code) { msg.textContent = "Type the team code."; return; }
+    if (!window.Cloud || !cloud.uid) {
+      msg.textContent = "Can't reach the sync service. Check your connection and try again.";
+      return;
+    }
+    codeBusy = true;
+    btn.disabled = true;
+    msg.className = "code-msg ok";
+    msg.textContent = "Checking…";
+    var timedOut = false;
+    var timer = setTimeout(function () {
+      timedOut = true;
+      codeBusy = false;
+      btn.disabled = false;
+      msg.className = "code-msg";
+      msg.textContent = "No connection right now. Try again when you have signal.";
+    }, 15000);
+    window.Cloud.becomeEditor(code).then(function () {
+      clearTimeout(timer);
+      codeBusy = false;
+      btn.disabled = false;
+      setEditor(true);
+      closeCodeDialog();
+      showBanner("Editing unlocked on this device. Games you save now show up everywhere.", "ok");
+      flushPending();
+      render();
+    }).catch(function (err) {
+      clearTimeout(timer);
+      if (timedOut) return;
+      codeBusy = false;
+      btn.disabled = false;
+      msg.className = "code-msg";
+      msg.textContent = err && err.code === "permission-denied"
+        ? "Wrong code"
+        : "Couldn't check the code. Check your connection and try again.";
+    });
+  }
+
+  // Called by the Firebase module script.
+  window.GameStatsApp = {
+    cloudReady: function () {
+      cloud.failed = false;
+      flushPending();
+      softRender();
+    },
+    cloudFailed: function () {
+      cloud.failed = true;
+      renderHeader();
+    },
+    onAuth: function (uid) {
+      cloud.uid = uid;
+      var flag = null;
+      try { flag = localStorage.getItem(EDITOR_KEY); } catch (e) {}
+      if (flag && flag === uid) cloud.editor = true;
+      else if (flag) setEditor(false);
+      flushPending();
+      softRender();
+    },
+    onConnection: function (connected) {
+      cloud.connected = !!connected;
+      renderHeader();
+    },
+    onGames: function (list, fromCache) {
+      if (fromCache && !list.length && !cloud.gotGames) return;
+      var games = [];
+      list.forEach(function (raw) {
+        var g = normalizeGame(raw);
+        if (g) games.push(g);
+      });
+      cloudGames = games;
+      cloud.gotGames = true;
+      rebuildGames();
+      saveData();
+      flushPending();
+      softRender();
+    },
+    onRoster: function (doc, fromCache) {
+      if (fromCache && !doc && !cloud.gotRoster) return;
+      cloud.gotRoster = true;
+      var players = doc && Array.isArray(doc.players) ? doc.players : [];
+      var roster = [];
+      players.forEach(function (r) {
+        if (r && typeof r.id === "string" && typeof r.name === "string") {
+          roster.push({ id: r.id, name: r.name, number: typeof r.number === "string" ? r.number : "" });
+        }
+      });
+      cloud.rosterEmpty = !roster.length;
+      if (roster.length) {
+        data.roster = roster;
+        if (data.current && !data.current.id) {
+          data.current.players.forEach(function (p) {
+            var r = roster.find(function (x) { return x.id === p.id; });
+            if (r) { p.name = r.name; p.number = r.number; }
+          });
+        }
+      }
+      if (doc && Array.isArray(doc.seasons)) {
+        doc.seasons.forEach(function (s) {
+          if (typeof s === "string" && s && data.seasons.indexOf(s) === -1) data.seasons.push(s);
+        });
+        data.seasons.sort();
+      }
+      saveData();
+      flushPending();
+      softRender();
+    },
+    onHighlights: function (doc, fromCache) {
+      if (fromCache && !doc && !cloud.gotHighlights) return;
+      cloud.gotHighlights = true;
+      cloudHighlightsRaw = doc && Array.isArray(doc.items) ? doc.items : [];
+      rebuildHighlights();
+      saveData();
+      flushPending();
+      softRender();
+    }
+  };
+
   var data = loadData();
+  try {
+    if (!localStorage.getItem(MIGRATED_KEY)) {
+      // First run with cloud sync: queue games and links saved on this device for upload.
+      data.games.forEach(function (g) { if (!isDupOf(g, data.pending)) data.pending.push(clone(g)); });
+      data.highlights.forEach(function (h) { if (!highlightDup(h, data.pendingHighlights)) data.pendingHighlights.push(clone(h)); });
+      localStorage.setItem(MIGRATED_KEY, "1");
+      saveData();
+    }
+    var editorFlag = localStorage.getItem(EDITOR_KEY);
+    if (editorFlag) cloud.editor = true; // confirmed (or cleared) once sign-in finishes
+  } catch (e) {}
   var ui = {
     tab: "game",
     confirmReset: false,
@@ -1563,6 +2016,13 @@ table.stats tr:last-child td{border-bottom:0}
   try { if (localStorage.getItem(HINT_KEY) === "1") ui.showHint = false; } catch (e) {}
 
   document.addEventListener("click", onClick);
+  document.getElementById("codeForm").addEventListener("submit", function (e) {
+    e.preventDefault();
+    submitCode();
+  });
+  document.getElementById("codeDlg").addEventListener("click", function (e) {
+    if (e.target === e.currentTarget) closeCodeDialog();
+  });
   document.getElementById("fileImport").addEventListener("change", function (e) {
     var file = e.target.files && e.target.files[0];
     handleImport(file);
@@ -1586,10 +2046,107 @@ table.stats tr:last-child td{border-bottom:0}
     seasonIdFromDate: seasonIdFromDate,
     normalizeData: normalizeData,
     mergeImport: mergeImport,
+    gameSignature: gameSignature,
+    isDupOf: isDupOf,
     pct: pct
   };
 })();
 
+  </script>
+  <script type="module">
+/* Cloud sync: anyone can read; saving needs this device to be registered with the team code. */
+(async function () {
+  var app = window.GameStatsApp;
+  if (!app) return;
+  var V = "12.6.0";
+  var CDN = "https://www.gstatic.com/firebasejs/" + V + "/";
+  var config = {
+    apiKey: "AIzaSyCPxt-aRCgiyUi1aMxjijkCc79Q7hjEixk",
+    authDomain: "basketball-stats-cordes.firebaseapp.com",
+    projectId: "basketball-stats-cordes",
+    storageBucket: "basketball-stats-cordes.firebasestorage.app",
+    messagingSenderId: "260720140224",
+    appId: "1:260720140224:web:92f55546a1b0566e657225"
+  };
+  var mods;
+  try {
+    mods = await Promise.all([
+      import(CDN + "firebase-app.js"),
+      import(CDN + "firebase-auth.js"),
+      import(CDN + "firebase-firestore.js")
+    ]);
+  } catch (e) {
+    app.cloudFailed();
+    return;
+  }
+  var fbApp = mods[0].initializeApp(config);
+  var A = mods[1];
+  var F = mods[2];
+  var db;
+  try {
+    db = F.initializeFirestore(fbApp, {
+      localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }),
+      ignoreUndefinedProperties: true
+    });
+  } catch (e) {
+    db = F.getFirestore(fbApp);
+  }
+  var auth = A.getAuth(fbApp);
+  var uid = null;
+
+  window.Cloud = {
+    saveGame: function (g) { return F.setDoc(F.doc(db, "games", g.id), g); },
+    deleteGame: function (id) { return F.deleteDoc(F.doc(db, "games", id)); },
+    saveRoster: function (players, seasons) {
+      var data = { players: players, updatedAt: F.serverTimestamp() };
+      if (seasons && seasons.length) data.seasons = F.arrayUnion.apply(null, seasons);
+      return F.setDoc(F.doc(db, "meta", "roster"), data, { merge: true });
+    },
+    addSeason: function (s) { return F.setDoc(F.doc(db, "meta", "roster"), { seasons: F.arrayUnion(s) }, { merge: true }); },
+    addHighlights: function (items) {
+      if (!items.length) return Promise.resolve();
+      return F.setDoc(F.doc(db, "meta", "highlights"), { items: F.arrayUnion.apply(null, items) }, { merge: true });
+    },
+    removeHighlight: function (item) {
+      return F.setDoc(F.doc(db, "meta", "highlights"), { items: F.arrayRemove(item) }, { merge: true });
+    },
+    becomeEditor: function (code) {
+      if (!uid) return Promise.reject({ code: "unauthenticated" });
+      return F.setDoc(F.doc(db, "editors", uid), { code: code, at: F.serverTimestamp() });
+    }
+  };
+
+  var seen = { games: null, roster: null, highlights: null };
+  function connection(key, fromCache) {
+    seen[key] = !fromCache;
+    app.onConnection(seen.games !== false && seen.roster !== false && seen.highlights !== false && seen.games !== null);
+  }
+  function warn(err) { app.onConnection(false); if (window.console) console.warn("Sync:", err && err.code); }
+
+  F.onSnapshot(F.collection(db, "games"), { includeMetadataChanges: true }, function (snap) {
+    var list = snap.docs.map(function (d) { return Object.assign({}, d.data(), { id: d.id }); });
+    connection("games", snap.metadata.fromCache);
+    app.onGames(list, snap.metadata.fromCache);
+  }, warn);
+  F.onSnapshot(F.doc(db, "meta", "roster"), { includeMetadataChanges: true }, function (snap) {
+    connection("roster", snap.metadata.fromCache);
+    app.onRoster(snap.exists() ? snap.data() : null, snap.metadata.fromCache);
+  }, warn);
+  F.onSnapshot(F.doc(db, "meta", "highlights"), { includeMetadataChanges: true }, function (snap) {
+    connection("highlights", snap.metadata.fromCache);
+    app.onHighlights(snap.exists() ? snap.data() : null, snap.metadata.fromCache);
+  }, warn);
+
+  A.onAuthStateChanged(auth, function (user) {
+    if (user) {
+      uid = user.uid;
+      app.onAuth(user.uid);
+    } else {
+      A.signInAnonymously(auth).catch(function (err) { if (window.console) console.warn("Sign-in:", err && err.code); });
+    }
+  });
+  app.cloudReady();
+})();
   </script>
 </body>
 </html>

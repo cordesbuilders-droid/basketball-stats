@@ -1,4 +1,4 @@
-const CACHE = "bball-stats-v2";
+const CACHE = "bball-stats-v3";
 const BASE = "/basketball-stats/";
 const ASSETS = [
   BASE,
@@ -28,6 +28,19 @@ self.addEventListener("fetch", (event) => {
   const req = event.request;
   if (req.method !== "GET") return;
   const url = new URL(req.url);
+  // Firebase SDK files are versioned, so cache them for offline use.
+  if (url.origin === "https://www.gstatic.com" && url.pathname.startsWith("/firebasejs/")) {
+    event.respondWith(
+      caches.match(req).then((hit) => hit || fetch(req).then((res) => {
+        if (res.ok) {
+          const copy = res.clone();
+          caches.open(CACHE).then((cache) => cache.put(req, copy));
+        }
+        return res;
+      }))
+    );
+    return;
+  }
   if (url.origin !== self.location.origin) return;
   if (!url.pathname.startsWith(BASE)) return;
 
