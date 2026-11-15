@@ -80,7 +80,7 @@ main{max-width:780px;margin:0 auto;padding:16px 16px calc(28px + var(--safe-bot)
 .pcts strong{color:var(--ink)}
 .chart-tools{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 10px}
 .chart-tools .btn{flex:1 1 7rem}
-.court{display:block;width:100%;height:auto;touch-action:none;cursor:crosshair;border-radius:8px;background:var(--court)}
+.court{display:block;width:100%;height:auto;touch-action:manipulation;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none;cursor:crosshair;border-radius:8px;background:var(--court)}
 .edit-banner{font-size:14px;color:var(--accent-dark);background:var(--accent-soft);border:1px solid #b7d7c6;border-radius:8px;padding:10px 12px;margin-bottom:12px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .edit-banner span{flex:1}
 .game-card{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-bottom:1px solid var(--rule)}
@@ -742,7 +742,7 @@ table.stats tr:last-child td{border-bottom:0}
       : "";
     return (
       '<svg class="court" viewBox="0 0 ' + COURT_W + " " + COURT_H + '" width="100%" role="img" ' +
-      'aria-label="Half-court shot chart' + (interactive ? ". Tap to mark a shot." : "") + '" ' +
+      'aria-label="Half-court shot chart' + (interactive ? ". Double-tap or press and hold to mark a shot." : "") + '" ' +
       (interactive ? 'data-court="1"' : "") + ">" +
       '<rect x="0" y="0" width="' + COURT_W + '" height="' + COURT_H + '" fill="var(--court)" stroke="var(--court-line)" stroke-width="0.35"/>' +
       '<rect x="19" y="0" width="12" height="19" fill="none" stroke="var(--court-line)" stroke-width="0.25"/>' +
@@ -840,7 +840,7 @@ table.stats tr:last-child td{border-bottom:0}
           '<button type="button" class="btn" data-act="pending-cancel" data-pid="' + esc(player.id) + '">Cancel</button>' +
         "</div>";
     } else {
-      hint = '<p class="hint" style="margin-top:8px;margin-bottom:0">Tap the court to mark a shot. The arc is a high-school 3-point line.</p>';
+      hint = '<p class="hint" style="margin-top:8px;margin-bottom:0">Double-tap or press and hold the court to mark a shot. The arc is a high-school 3-point line.</p>';
     }
     return (
       '<div class="caption" style="margin-top:1rem">Shot chart</div>' +
@@ -1507,17 +1507,48 @@ table.stats tr:last-child td{border-bottom:0}
       });
     }
     document.querySelectorAll("svg[data-court]").forEach(function (svg) {
-      svg.addEventListener("pointerdown", function (e) {
+      // Mark a shot only on a double tap or a long press, so scrolling or a stray tap doesn't drop a mark.
+      var pressTimer = null, start = null, lastTap = null;
+      function mark(e) {
         var point = eventToCourt(e, svg);
         if (!point) return;
-        e.preventDefault();
+        if (navigator.vibrate) { try { navigator.vibrate(30); } catch (err) {} }
         ui.pending = {
           playerId: svg.getAttribute("data-pid"),
           x: point.x,
           y: point.y,
           isThree: isThreePoint(point.x, point.y)
         };
+        lastTap = null;
         render();
+      }
+      function clearPress() { if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; } }
+      svg.addEventListener("contextmenu", function (e) { e.preventDefault(); });
+      svg.addEventListener("pointerdown", function (e) {
+        if (!eventToCourt(e, svg)) return;
+        start = { x: e.clientX, y: e.clientY, t: Date.now(), cx: e.clientX, cy: e.clientY };
+        clearPress();
+        var ev = { clientX: e.clientX, clientY: e.clientY };
+        pressTimer = setTimeout(function () { pressTimer = null; start = null; mark(ev); }, 500);
+      });
+      svg.addEventListener("pointermove", function (e) {
+        if (start && Math.abs(e.clientX - start.x) + Math.abs(e.clientY - start.y) > 12) { clearPress(); start = null; }
+      });
+      svg.addEventListener("pointercancel", function () { clearPress(); start = null; });
+      svg.addEventListener("pointerleave", function () { clearPress(); });
+      svg.addEventListener("pointerup", function (e) {
+        if (!start) return;
+        clearPress();
+        var now = Date.now();
+        if (now - start.t < 500) {
+          if (lastTap && now - lastTap.t < 400 && Math.abs(e.clientX - lastTap.x) + Math.abs(e.clientY - lastTap.y) < 40) {
+            e.preventDefault();
+            mark({ clientX: e.clientX, clientY: e.clientY });
+          } else {
+            lastTap = { t: now, x: e.clientX, y: e.clientY };
+          }
+        }
+        start = null;
       });
     });
   }
