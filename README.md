@@ -21,12 +21,13 @@ The icon will sit on the Home Screen and open like an app. A signal is only need
 ## What it tracks
 
 - Live box scores for Juni and Ezra (you can add or remove players and edit jersey numbers)
-- Plus and minus buttons for PTS, REB, AST, STL, BLK, TO, MIN, and shooting (FGM/FGA, 3PM/3PA, FTM/FTA)
+- Plus and minus buttons for PTS, REB, AST, STL, BLK, TO, and shooting (FGM/FGA, 3PM/3PA, FTM/FTA)
+- Minutes played: an On court / Off court toggle runs a stopwatch while a player is in the game (the time stays correct if the phone sleeps or you reload), plus −1 / +1 buttons or tap the time to type minutes after a game. The live game shows MM:SS
 - +2, +3, +1 and Miss shortcuts, with live FG%, 3P%, and FT%
 - A half-court shot chart: tap a spot, then Make or Miss. The arc is a high-school 3-point line, and shots update the box score. Undo is available, plus a this-player or all-players filter
-- Save / End Game stores the date, opponent, per-player stats, and shots
-- A Games tab to reopen, edit, or delete a saved game
-- Season totals, per-game averages, shooting percentages, and a combined season shot chart, with a season selector (default 2026-27)
+- Save / End Game stores the date, opponent, per-player stats, minutes, and shots
+- A Games tab to reopen, edit, or delete a saved game, including minutes played (older games without minutes show a dash)
+- Season totals, per-game averages, shooting percentages, total minutes and minutes per game, and a combined season shot chart, with a season selector (default 2026-27)
 - A highlights list of video links (title, player, date). YouTube, Google Drive, and Hudl links can be saved and opened later
 
 ## Sync and the team code

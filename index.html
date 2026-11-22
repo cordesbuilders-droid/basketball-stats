@@ -92,7 +92,7 @@ main{max-width:780px;margin:0 auto;padding:16px 16px calc(28px + var(--safe-bot)
 .g-line{color:var(--muted);font-size:13px;margin-top:2px}
 .empty{color:var(--muted);padding:18px 4px;text-align:center}
 .table-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch;margin:0 -4px}
-table.stats{border-collapse:collapse;width:100%;min-width:720px;font-size:13px}
+table.stats{border-collapse:collapse;width:100%;min-width:800px;font-size:13px}
 table.stats th,table.stats td{padding:8px 8px;text-align:right;border-bottom:1px solid var(--rule);white-space:nowrap}
 table.stats th{font-size:11px;text-transform:uppercase;letter-spacing:.3px;color:var(--muted);font-weight:700}
 table.stats th:first-child,table.stats td:first-child{text-align:left;position:sticky;left:0;background:#fff;padding-left:10px;font-weight:700}
@@ -142,6 +142,15 @@ table.stats tr:last-child td{border-bottom:0}
 .foul-badge{display:inline-block;font-size:12px;font-weight:800;border-radius:999px;padding:4px 10px;letter-spacing:.2px}
 .foul-badge.warn{background:var(--warn-soft);color:var(--warn);border:1px solid #f0d49a}
 .foul-badge.out{background:#fdecea;color:var(--danger);border:1px solid #e8b4b0}
+
+.minutes-block{margin:0 0 4px}
+.minutes-block.on-court .minutes-clock{color:var(--accent)}
+.minutes-toggle{margin-bottom:0}
+.minutes-row{display:flex;align-items:center;gap:8px;margin-top:8px}
+.minutes-clock{flex:1;border:0;background:none;font:inherit;font-variant-numeric:tabular-nums;font-size:1.8rem;font-weight:800;letter-spacing:.5px;text-align:center;min-height:44px;cursor:pointer;padding:0;color:var(--ink)}
+.minutes-clock:hover{color:var(--accent)}
+.minutes-row .btn.pm{flex:0 0 3.4rem;min-width:44px}
+.minutes-hint{margin:6px 0 0;font-size:12px}
 
 .sync{font-size:12px;font-weight:650;color:var(--muted);white-space:nowrap}
 .sync.ok{color:var(--accent)}
@@ -234,7 +243,7 @@ table.stats tr:last-child td{border-bottom:0}
     blk: "BLK", to: "Turnovers (TO)", pf: "Fouls (PF)", min: "MIN",
     fgm: "FGM", fga: "FGA", tpm: "3PM", tpa: "3PA", ftm: "FTM", fta: "FTA"
   };
-  var SIMPLE_STATS = ["pts", "reb", "ast", "stl", "blk", "min"];
+  var SIMPLE_STATS = ["pts", "reb", "ast", "stl", "blk"];
   var SHOOTING_PAIRS = [["fgm", "fga"], ["tpm", "tpa"], ["ftm", "fta"]];
   var ALL_KEYS = ["pts", "reb", "ast", "stl", "blk", "to", "pf", "min", "fgm", "fga", "tpm", "tpa", "ftm", "fta"];
 
@@ -243,6 +252,85 @@ table.stats tr:last-child td{border-bottom:0}
       pts: 0, reb: 0, ast: 0, stl: 0, blk: 0, to: 0, pf: 0,
       fgm: 0, fga: 0, tpm: 0, tpa: 0, ftm: 0, fta: 0, min: 0
     };
+  }
+
+  function hasMinutes(stats) {
+    if (!stats) return false;
+    if (stats.minTracked) return true;
+    if (typeof stats.minSec === "number" && isFinite(stats.minSec)) return true;
+    if (typeof stats.min === "number" && isFinite(stats.min) && stats.min > 0) return true;
+    return false;
+  }
+
+  function formatMinSec(sec) {
+    if (sec == null || !isFinite(sec)) return "—";
+    sec = Math.max(0, Math.round(sec));
+    var m = Math.floor(sec / 60);
+    var s = sec % 60;
+    return String(m) + ":" + (s < 10 ? "0" : "") + s;
+  }
+
+  function parseMinutesInput(str) {
+    var t = String(str == null ? "" : str).trim();
+    if (!t) return null;
+    var colon = t.match(/^(\d+)\s*:\s*([0-5]?\d)$/);
+    if (colon) return (+colon[1] * 60) + (+colon[2]);
+    if (/^\d+(\.\d+)?$/.test(t)) return Math.round(parseFloat(t) * 60);
+    return null;
+  }
+
+  function minutesSeconds(player) {
+    var stats = player && player.stats;
+    var sec = 0;
+    if (stats && typeof stats.minSec === "number" && isFinite(stats.minSec)) {
+      sec = Math.max(0, Math.round(stats.minSec));
+    } else if (stats && typeof stats.min === "number" && isFinite(stats.min) && stats.min > 0) {
+      sec = Math.max(0, Math.round(stats.min * 60));
+    }
+    if (player && player.onCourt && typeof player.minStartedAt === "number" && isFinite(player.minStartedAt)) {
+      sec += Math.max(0, Math.floor((Date.now() - player.minStartedAt) / 1000));
+    }
+    return sec;
+  }
+
+  function minutesLabel(player) {
+    if (player && (player.onCourt || hasMinutes(player.stats))) return formatMinSec(minutesSeconds(player));
+    return "—";
+  }
+
+  function ensureMinutes(player) {
+    if (!player.stats) player.stats = emptyStats();
+    if (typeof player.stats.minSec !== "number" || !isFinite(player.stats.minSec)) {
+      if (typeof player.stats.min === "number" && isFinite(player.stats.min) && player.stats.min > 0) {
+        player.stats.minSec = Math.round(player.stats.min * 60);
+      } else {
+        player.stats.minSec = 0;
+      }
+    }
+    player.stats.minSec = Math.max(0, Math.round(player.stats.minSec));
+    player.stats.minTracked = true;
+    player.stats.min = Math.floor(player.stats.minSec / 60);
+  }
+
+  function bankMinutes(player) {
+    if (player.onCourt && typeof player.minStartedAt === "number" && isFinite(player.minStartedAt)) {
+      ensureMinutes(player);
+      var add = Math.max(0, Math.floor((Date.now() - player.minStartedAt) / 1000));
+      player.stats.minSec = (player.stats.minSec || 0) + add;
+      player.minStartedAt = Date.now();
+    }
+    if (player.stats && player.stats.minTracked) {
+      player.stats.minSec = Math.max(0, Math.round(player.stats.minSec || 0));
+      player.stats.min = Math.floor(player.stats.minSec / 60);
+    }
+  }
+
+  function settleSavedPlayer(player) {
+    bankMinutes(player);
+    player.onCourt = false;
+    player.minStartedAt = null;
+    delete player.onCourt;
+    delete player.minStartedAt;
   }
 
   function todayInEastern() {
@@ -302,6 +390,7 @@ table.stats tr:last-child td{border-bottom:0}
   }
 
   function playerHasStats(player, shots) {
+    if (player && (player.onCourt || hasMinutes(player.stats))) return true;
     if (player && player.stats && ALL_KEYS.some(function (k) { return !!player.stats[k]; })) return true;
     var id = player && player.id;
     if (id && shots && shots.some(function (s) { return s.playerId === id; })) return true;
@@ -466,6 +555,10 @@ table.stats tr:last-child td{border-bottom:0}
       if (typeof value[key] !== "number" || !isFinite(value[key])) return null;
       next[key] = value[key];
     }
+    if (typeof value.minSec === "number" && isFinite(value.minSec) && value.minSec >= 0) {
+      next.minSec = Math.round(value.minSec);
+    }
+    if (value.minTracked) next.minTracked = true;
     return next;
   }
 
@@ -517,12 +610,21 @@ table.stats tr:last-child td{border-bottom:0}
     if (typeof item.id !== "string" || typeof item.name !== "string") return null;
     var stats = item.stats ? asStats(item.stats) : emptyStats();
     if (!stats) return null;
-    return {
+    var player = {
       id: item.id,
       name: item.name,
       number: typeof item.number === "string" ? item.number : "",
       stats: stats
     };
+    if (item.onCourt) {
+      player.onCourt = true;
+      if (typeof item.minStartedAt === "number" && isFinite(item.minStartedAt)) {
+        player.minStartedAt = item.minStartedAt;
+      } else {
+        player.minStartedAt = Date.now();
+      }
+    }
+    return player;
   }
 
   function normalizeShot(item) {
@@ -784,6 +886,30 @@ table.stats tr:last-child td{border-bottom:0}
     return "";
   }
 
+  function minutesBlockHtml(player) {
+    var on = !!player.onCourt;
+    var label = on || hasMinutes(player.stats) ? formatMinSec(minutesSeconds(player)) : "0:00";
+    var pid = esc(player.id);
+    var canMinus = minutesSeconds(player) > 0;
+    return (
+      '<div class="caption">Minutes</div>' +
+      '<div class="minutes-block' + (on ? " on-court" : "") + '">' +
+        '<div class="seg minutes-toggle">' +
+          '<button type="button" class="btn' + (on ? " primary" : "") + '" data-act="court" data-pid="' + pid + '" data-on="1" aria-pressed="' + (on ? "true" : "false") + '">On court</button>' +
+          '<button type="button" class="btn' + (on ? "" : " primary") + '" data-act="court" data-pid="' + pid + '" data-on="0" aria-pressed="' + (on ? "false" : "true") + '">Off court</button>' +
+        "</div>" +
+        '<div class="minutes-row">' +
+          '<button type="button" class="btn small pm" data-act="bump-min" data-pid="' + pid + '" data-delta="-1"' +
+            (canMinus ? "" : " disabled") + ' aria-label="Subtract one minute">−1</button>' +
+          '<button type="button" class="minutes-clock" data-act="set-min" data-pid="' + pid + '" data-min-clock="' + pid + '" title="Tap to enter minutes">' +
+            esc(label) + "</button>" +
+          '<button type="button" class="btn small pm" data-act="bump-min" data-pid="' + pid + '" data-delta="1" aria-label="Add one minute">+1</button>' +
+        "</div>" +
+        '<p class="hint minutes-hint">Tap the time to type minutes after a game.</p>' +
+      "</div>"
+    );
+  }
+
   function playerBoardHtml(player) {
     var s = player.stats;
     var shots = [
@@ -814,7 +940,8 @@ table.stats tr:last-child td{border-bottom:0}
         stepperHtml(player.id, "pf", pf, pf <= 0, foulClass(pf)) +
       "</div>";
     return (
-      '<div class="caption">Score</div>' +
+      minutesBlockHtml(player) +
+      '<div class="caption" style="margin-top:1rem">Score</div>' +
       '<div class="shortcuts">' + shots + "</div>" +
       '<div class="grid-stats">' + simple + "</div>" +
       foulsBlock +
@@ -943,7 +1070,7 @@ table.stats tr:last-child td{border-bottom:0}
       players = players.filter(function (p) { return p.id === ui.focusPlayer; });
     }
     return players.map(function (p) {
-      return playerLabel(p) + " " + p.stats.pts + " pts";
+      return playerLabel(p) + " " + (p.stats.pts || 0) + " pts, " + minutesLabel(p) + " min";
     }).join(" · ");
   }
 
@@ -1015,12 +1142,21 @@ table.stats tr:last-child td{border-bottom:0}
             name: meta.name || p.name,
             number: meta.number || p.number,
             gp: 0,
+            minGames: 0,
+            minSec: 0,
             stats: emptyStats()
           };
         }
         var row = byId[p.id];
         row.gp += 1;
-        ALL_KEYS.forEach(function (k) { row.stats[k] += p.stats[k] || 0; });
+        ALL_KEYS.forEach(function (k) {
+          if (k === "min") return;
+          row.stats[k] += p.stats[k] || 0;
+        });
+        if (hasMinutes(p.stats)) {
+          row.minSec += minutesSeconds(p);
+          row.minGames += 1;
+        }
         if (p.number) row.number = p.number;
         if (p.name) row.name = p.name;
       });
@@ -1057,7 +1193,7 @@ table.stats tr:last-child td{border-bottom:0}
       return html;
     }
     html += '<div class="table-wrap"><table class="stats"><thead><tr>' +
-      "<th>Player</th><th>GP</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>PF</th><th>MIN</th>" +
+      "<th>Player</th><th>GP</th><th>PTS</th><th>REB</th><th>AST</th><th>STL</th><th>BLK</th><th>TO</th><th>PF</th><th>MIN</th><th>MPG</th>" +
       "<th>FGM-A</th><th>FG%</th><th>3PM-A</th><th>3P%</th><th>FTM-A</th><th>FT%</th>" +
       "</tr></thead><tbody>";
     tot.rows.forEach(function (row) {
@@ -1065,11 +1201,13 @@ table.stats tr:last-child td{border-bottom:0}
       var gp = row.gp;
       var num = function (k, d) { return mode === "averages" ? avg(s[k], gp, d) : String(s[k]); };
       var pair = function (m, a) { return mode === "averages" ? avg(s[m], gp) + "-" + avg(s[a], gp) : (s[m] + "-" + s[a]); };
+      var minTotal = row.minGames ? formatMinSec(row.minSec) : "—";
+      var mpg = row.minGames ? formatMinSec(row.minSec / row.minGames) : "—";
       html += "<tr><td>" + esc(playerLabel(row)) + "</td><td>" + gp + "</td>" +
         "<td>" + num("pts", 1) + "</td><td>" + num("reb", 1) + "</td><td>" + num("ast", 1) + "</td>" +
         "<td>" + num("stl", 1) + "</td><td>" + num("blk", 1) + "</td><td>" + num("to", 1) + "</td>" +
         "<td>" + num("pf", 1) + "</td>" +
-        "<td>" + num("min", 1) + "</td>" +
+        "<td>" + minTotal + "</td><td>" + mpg + "</td>" +
         "<td>" + pair("fgm", "fga") + "</td><td>" + pct(s.fgm, s.fga) + "</td>" +
         "<td>" + pair("tpm", "tpa") + "</td><td>" + pct(s.tpm, s.tpa) + "</td>" +
         "<td>" + pair("ftm", "fta") + "</td><td>" + pct(s.ftm, s.fta) + "</td></tr>";
@@ -1402,6 +1540,7 @@ table.stats tr:last-child td{border-bottom:0}
     renderHeader();
     renderPlayerSwitch();
     bindDynamic();
+    startMinTick();
   }
 
   function renderHeader() {
@@ -1580,6 +1719,7 @@ table.stats tr:last-child td{border-bottom:0}
     snap.id = keepId || game.id || newId();
     snap.savedAt = new Date().toISOString();
     if (data.seasons.indexOf(snap.season) === -1) data.seasons.push(snap.season);
+    (snap.players || []).forEach(settleSavedPlayer);
     var active = (snap.players || []).filter(function (p) { return playerHasStats(p, snap.shots); });
     if (active.length) {
       snap.players = active;
@@ -1600,6 +1740,7 @@ table.stats tr:last-child td{border-bottom:0}
     if (game.opponent && game.opponent.trim()) return false;
     if (game.shots && game.shots.length) return false;
     return game.players.every(function (p) {
+      if (p.onCourt || hasMinutes(p.stats)) return false;
       return ALL_KEYS.every(function (k) { return !p.stats[k]; });
     });
   }
@@ -1724,6 +1865,95 @@ table.stats tr:last-child td{border-bottom:0}
     ui.confirmReset = false;
     saveData();
     render();
+  }
+
+  function findCurrentPlayer(pid) {
+    return data.current.players.find(function (p) { return p.id === pid; });
+  }
+
+  function setCourt(pid, on) {
+    var player = findCurrentPlayer(pid);
+    if (!player) return;
+    if (on && !player.onCourt) {
+      ensureMinutes(player);
+      player.onCourt = true;
+      player.minStartedAt = Date.now();
+    } else if (!on && player.onCourt) {
+      bankMinutes(player);
+      player.onCourt = false;
+      player.minStartedAt = null;
+    }
+    ui.confirmReset = false;
+    saveData();
+    render();
+    startMinTick();
+  }
+
+  function bumpMinutes(pid, deltaMin) {
+    var player = findCurrentPlayer(pid);
+    if (!player) return;
+    bankMinutes(player);
+    ensureMinutes(player);
+    player.stats.minSec = Math.max(0, (player.stats.minSec || 0) + (deltaMin * 60));
+    player.stats.min = Math.floor(player.stats.minSec / 60);
+    ui.confirmReset = false;
+    saveData();
+    render();
+    startMinTick();
+  }
+
+  function setMinutesPrompt(pid) {
+    var player = findCurrentPlayer(pid);
+    if (!player) return;
+    var current = formatMinSec(minutesSeconds(player));
+    var entered = window.prompt("Minutes played (for example 16 or 16:30):", current === "—" ? "0:00" : current);
+    if (entered == null) return;
+    var sec = parseMinutesInput(entered);
+    if (sec == null) {
+      showBanner("Use minutes like 16 or 16:30.", "warn");
+      return;
+    }
+    ensureMinutes(player);
+    player.stats.minSec = sec;
+    player.stats.min = Math.floor(sec / 60);
+    if (player.onCourt) player.minStartedAt = Date.now();
+    ui.confirmReset = false;
+    saveData();
+    render();
+    startMinTick();
+  }
+
+  var minTick = null;
+  function anyoneOnCourt() {
+    return !!(data.current && data.current.players && data.current.players.some(function (p) {
+      return p.onCourt && typeof p.minStartedAt === "number";
+    }));
+  }
+
+  function syncMinClocks() {
+    if (!data.current || !data.current.players) return;
+    var nodes = document.querySelectorAll("[data-min-clock]");
+    for (var i = 0; i < nodes.length; i++) {
+      var el = nodes[i];
+      var pid = el.getAttribute("data-min-clock");
+      var player = findCurrentPlayer(pid);
+      if (!player) continue;
+      el.textContent = formatMinSec(minutesSeconds(player));
+      var row = el.parentNode;
+      if (!row) continue;
+      var minus = row.querySelector('[data-act="bump-min"][data-delta="-1"]');
+      if (minus) minus.disabled = minutesSeconds(player) <= 0;
+    }
+  }
+
+  function startMinTick() {
+    if (anyoneOnCourt()) {
+      if (!minTick) minTick = setInterval(syncMinClocks, 250);
+      syncMinClocks();
+    } else if (minTick) {
+      clearInterval(minTick);
+      minTick = null;
+    }
   }
 
   function shortcut(pid, kind) {
@@ -1874,7 +2104,8 @@ table.stats tr:last-child td{border-bottom:0}
           opponent: g.opponent,
           player: p.name,
           number: jerseyNumber(p.number),
-          pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, to: s.to, pf: s.pf || 0, min: s.min,
+          pts: s.pts, reb: s.reb, ast: s.ast, stl: s.stl, blk: s.blk, to: s.to, pf: s.pf || 0,
+          min: hasMinutes(s) ? formatMinSec(minutesSeconds(p)) : "",
           fgm: s.fgm, fga: s.fga, tpm: s.tpm, tpa: s.tpa, ftm: s.ftm, fta: s.fta,
           fg_pct: s.fga ? (s.fgm / s.fga) : "",
           tp_pct: s.tpa ? (s.tpm / s.tpa) : "",
@@ -2012,6 +2243,9 @@ table.stats tr:last-child td{border-bottom:0}
     var act = t.getAttribute("data-act");
     var pid = t.getAttribute("data-pid");
     if (act === "bump") bump(pid, t.getAttribute("data-key"), +t.getAttribute("data-delta"));
+    else if (act === "court") setCourt(pid, t.getAttribute("data-on") === "1");
+    else if (act === "bump-min") bumpMinutes(pid, +t.getAttribute("data-delta"));
+    else if (act === "set-min") setMinutesPrompt(pid);
     else if (act === "shortcut") shortcut(pid, t.getAttribute("data-kind"));
     else if (act === "filter") { ui.shotFilter[pid] = t.getAttribute("data-filter"); render(); }
     else if (act === "undo") undoLastShot(pid);
@@ -2091,7 +2325,7 @@ table.stats tr:last-child td{border-bottom:0}
   function gameSignature(g) {
     var players = (g.players || []).map(function (p) {
       var st = p.stats || {};
-      return normText(p.name) + ":" + ALL_KEYS.map(function (k) { return st[k] || 0; }).join(",");
+      return normText(p.name) + ":" + ALL_KEYS.map(function (k) { return st[k] || 0; }).join(",") + ":" + (st.minSec || 0);
     }).sort().join("|");
     return [g.date, normText(g.opponent), players].join("#");
   }
@@ -2421,6 +2655,9 @@ table.stats tr:last-child td{border-bottom:0}
   try { if (localStorage.getItem(HINT_KEY) === "1") ui.showHint = false; } catch (e) {}
   ui.focusPlayer = loadFocusPlayer();
 
+  document.addEventListener("visibilitychange", function () {
+    if (document.visibilityState === "visible") syncMinClocks();
+  });
   document.addEventListener("click", onClick);
   document.getElementById("codeForm").addEventListener("submit", function (e) {
     e.preventDefault();
@@ -2451,10 +2688,21 @@ table.stats tr:last-child td{border-bottom:0}
     shotKind: shotKind,
     seasonIdFromDate: seasonIdFromDate,
     normalizeData: normalizeData,
+    normalizeGame: normalizeGame,
+    normalizePlayer: normalizePlayer,
+    asStats: asStats,
     mergeImport: mergeImport,
     gameSignature: gameSignature,
     isDupOf: isDupOf,
-    pct: pct
+    pct: pct,
+    hasMinutes: hasMinutes,
+    formatMinSec: formatMinSec,
+    parseMinutesInput: parseMinutesInput,
+    minutesSeconds: minutesSeconds,
+    minutesLabel: minutesLabel,
+    ensureMinutes: ensureMinutes,
+    bankMinutes: bankMinutes,
+    settleSavedPlayer: settleSavedPlayer
   };
 })();
 
